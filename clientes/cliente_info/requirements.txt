@@ -1,0 +1,7 @@
+# Dependencias de la capa de clientes (carpeta clientes/)
+# Instalar desde clientes/:  pip install -r cliente_info/requirements.txt
+#
+# pyzmq: ZeroMQ para Python (sockets REQ hacia el GT y PULL para las notificaciones).
+# Probado con pyzmq 27.2.0. Lo demás que usan los scripts (json, csv, statistics,
+# multiprocessing, argparse...) viene incluido con Python 3.9 o superior.
+pyzmq>=25.0

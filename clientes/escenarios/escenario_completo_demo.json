@@ -1,0 +1,9 @@
+{
+  "nombre": "demo_completo",
+  "descripcion": "Prueba corta con TODAS las operaciones (incluye cancelacion asincrona + notificacion)",
+  "duracion_seg": 30,
+  "grupos": [
+    {"prefijo": "CQ", "cantidad": 2, "rpm": 60, "mezcla": {"consulta": 100}},
+    {"prefijo": "CX", "cantidad": 2, "rpm": 60, "mezcla": {"consulta": 20, "reserva": 40, "modificacion": 20, "cancelacion": 20}}
+  ]
+}

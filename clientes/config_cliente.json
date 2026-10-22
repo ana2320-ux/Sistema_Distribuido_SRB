@@ -1,0 +1,12 @@
+{
+  "mes": 10,
+  "anio": 2026,
+  "gt_endpoints": ["tcp://127.0.0.1:5550"],
+  "host_notificaciones": "127.0.0.1",
+  "puerto_notif_min": 6000,
+  "puerto_notif_max": 6999,
+  "timeout_ms": 5000,
+  "asientos_min": 1,
+  "asientos_max": 4,
+  "carpeta_salida": "resultados"
+}
