@@ -62,7 +62,6 @@ def procesar_modificacion(conn, cursor, payload):
     id_ocurrencia_nueva = payload.get("id_ocurrencia_nueva", id_ocurrencia_actual)
     asientos = payload.get("asientos", 1)
 
-    # Si cambia de fecha / ocurrencia
     if id_ocurrencia_actual != id_ocurrencia_nueva:
         cursor.execute("SELECT libres FROM ocurrencias WHERE id_ocurrencia = ?", (id_ocurrencia_nueva,))
         res_nueva = cursor.fetchone()
@@ -83,12 +82,13 @@ def procesar_modificacion(conn, cursor, payload):
 def iniciar_servicio():
     context = zmq.Context()
     socket = context.socket(zmq.REP)
+    # Escucha en todas las interfaces de red para recibir desde la Capa de Negocio
     socket.bind(f"tcp://*:{PORT}")
 
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    print(f"[SERVICIO PERSISTENCIA] Escuchando peticiones en tcp://*:{PORT}...")
+    print(f"[SERVICIO PERSISTENCIA] Escuchando peticiones de red en tcp://*:{PORT}...")
 
     while True:
         try:

@@ -1,10 +1,7 @@
 import zmq
-import sqlite3
-import os
 
 CANCEL_PORT = 5558
-# Apuntar a la base de datos real ubicada en la carpeta persistencia
-DB_NAME = "/home/estudiante/SRB/Sistema_Distribuido_SRB/persistencia/reserva_boletos.db"
+PERSISTENCIA_ADDR = "tcp://10.43.99.246:5555"
 
 def procesar_cancelacion(payload):
     id_reserva = payload.get("id_reserva")
@@ -12,31 +9,34 @@ def procesar_cancelacion(payload):
     asientos = payload.get("asientos")
     endpoint_notificacion = payload.get("endpoint_notificacion")
 
-    conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    context = zmq.Context()
+    socket_persistencia = context.socket(zmq.REQ)
+    socket_persistencia.connect(PERSISTENCIA_ADDR)
 
+    # Reenvía la liberación a la capa de persistencia remota
+    req_cancel = {
+        "operacion": "MODIFICAR",
+        "payload": {
+            "id_ocurrencia_actual": id_ocurrencia,
+            "id_ocurrencia_nueva": id_ocurrencia,
+            "asientos": -asientos # Suma de regreso los cupos
+        }
+    }
+    
     try:
-        # Liberación de asientos en persistencia
-        cursor.execute("""
-            UPDATE ocurrencias
-            SET libres = libres + ?, ocupados = ocupados - ?
-            WHERE id_ocurrencia = ?
-        """, (asientos, asientos, id_ocurrencia))
-
-        cursor.execute("DELETE FROM reservas WHERE id_reserva = ?", (id_reserva,))
-        conn.commit()
-        exito = True
+        socket_persistencia.send_json(req_cancel)
+        res_pers = socket_persistencia.recv_json()
+        exito = (res_pers.get("status") == "OK")
         msg = f"Cancelación de reserva #{id_reserva} procesada exitosamente."
     except Exception as e:
         exito = False
         msg = f"Falla en cancelación: {str(e)}"
     finally:
-        conn.close()
+        socket_persistencia.close()
 
-    # Notificación asíncrona directa al cliente
+    # Enviar notificación asíncrona a la IP de la VM Clientes (10.43.99.237)
     if endpoint_notificacion:
-        ctx = zmq.Context()
-        s_notif = ctx.socket(zmq.PUSH)
+        s_notif = context.socket(zmq.PUSH)
         try:
             s_notif.connect(endpoint_notificacion)
             s_notif.send_json({"status": "OK" if exito else "ERROR", "mensaje": msg})
@@ -44,7 +44,8 @@ def procesar_cancelacion(payload):
             print(f"[CANCELACIONES] No se pudo enviar notificación: {e}")
         finally:
             s_notif.close()
-            ctx.term()
+            
+    context.term()
 
 def iniciar_servicio_cancelaciones():
     context = zmq.Context()

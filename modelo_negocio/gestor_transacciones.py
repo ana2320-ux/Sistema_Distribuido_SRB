@@ -7,19 +7,16 @@ CANCELACIONES_ADDR = "tcp://localhost:5558"
 def iniciar_gestor():
     context = zmq.Context()
 
-    # Socket para recibir peticiones de Clientes (Router/Rep)
     socket_frontend = context.socket(zmq.REP)
     socket_frontend.bind(f"tcp://*:{GT_CLIENT_PORT}")
 
-    # Socket para canal síncrono con RMC
     socket_rmc = context.socket(zmq.REQ)
     socket_rmc.connect(RMC_ADDR)
 
-    # Socket para canal asíncrono con Servicio de Cancelaciones (Push)
     socket_cancelaciones = context.socket(zmq.PUSH)
     socket_cancelaciones.connect(CANCELACIONES_ADDR)
 
-    print(f"[GESTOR TRANSACCIONES] Escuchando clientes en tcp://*:{GT_CLIENT_PORT}...")
+    print(f"[GESTOR TRANSACCIONES] Escuchando clientes de red en tcp://*:{GT_CLIENT_PORT}...")
 
     while True:
         try:
@@ -27,13 +24,11 @@ def iniciar_gestor():
             operacion = mensaje.get("operacion")
 
             if operacion in ["CONSULTAR", "RESERVAR", "MODIFICAR"]:
-                # Canal Síncrono
                 socket_rmc.send_json(mensaje)
                 respuesta = socket_rmc.recv_json()
                 socket_frontend.send_json(respuesta)
 
             elif operacion == "CANCELAR":
-                # Canal Asíncrono: Responde de inmediato al cliente
                 socket_cancelaciones.send_json(mensaje)
                 socket_frontend.send_json({
                     "status": "ACEPTADO", 
