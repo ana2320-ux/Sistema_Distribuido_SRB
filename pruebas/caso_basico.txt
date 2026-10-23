@@ -1,0 +1,17 @@
+CONSULTA noviembre
+RESERVA E1 2026/11/01 3
+RESERVA E1 2026/11/01 2
+RESERVA E1 2026/11/15 100
+# rechazada: ya no queda ningun puesto el 15
+RESERVA E1 2026/11/15 1
+RESERVA E30 2026/11/02 7
+# rechazada: E30 ocurre una sola vez, el dia 2
+RESERVA E30 2026/11/16 1
+# rechazada: el evento no existe
+RESERVA E77 2026/11/02 1
+# rechazada: fecha mal escrita
+RESERVA E2 02-11-2026 1
+# linea mal escrita: el cliente la ignora
+RESERVA E2 2026/11/02
+ESPERAR 0.5
+CONSULTA noviembre

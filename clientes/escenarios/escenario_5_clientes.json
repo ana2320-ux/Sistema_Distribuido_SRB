@@ -1,9 +1,0 @@
-{
-  "nombre": "5_clientes",
-  "descripcion": "Tabla 1, fila 2: 3 clientes solo consultan; los otros 2 reservan y modifican",
-  "duracion_seg": 120,
-  "grupos": [
-    {"prefijo": "CQ", "cantidad": 3, "rpm": 60, "mezcla": {"consulta": 100}},
-    {"prefijo": "CR", "cantidad": 2, "rpm": 60, "mezcla": {"consulta": 20, "reserva": 60, "modificacion": 20}}
-  ]
-}

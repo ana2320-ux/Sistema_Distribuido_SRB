@@ -1,0 +1,6 @@
+[
+  {"id": "E1", "nombre": "Concierto de rock", "tipo_evento": "concierto",
+   "fechas": ["2026/11/07", "2026/11/21"], "capacidad": 50},
+  {"id": "E2", "nombre": "Final de futbol", "tipo_evento": "futbol",
+   "fechas": ["2026/11/14"], "capacidad": 30}
+]

@@ -1,7 +1,0 @@
-python3 --version                 # necesitas 3.9 o más
-sudo apt install python3-venv     # si es Ubuntu/Debian y no lo tienes
-mkdir -p ~/srb-propio && cd ~/srb-propio
-python3 -m venv venv              # entorno aislado para el proyecto
-source venv/bin/activate          # actívalo cada vez que abras una terminal
-pip install pyzmq
-python -c "import zmq; print(zmq.zmq_version())"   # debe imprimir una versión, p. ej. 4.3.5
