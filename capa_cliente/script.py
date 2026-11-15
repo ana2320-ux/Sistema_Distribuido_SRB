@@ -2,9 +2,11 @@
 Ejecuta un caso de prueba escrito en un archivo de texto, una operacion por linea:
 
     # comentario
-    CONSULTA  noviembre
-    RESERVA   E1 2026/11/01 2        (evento, fecha, numero de asientos)
-    ESPERAR   1.5                    (pausa en segundos)
+    CONSULTA      noviembre
+    RESERVA       E1 2026/11/01 2    (evento, fecha, numero de asientos)
+    MODIFICACION  3 5                (numero de reserva, nuevo numero de asientos)
+    MODIFICACION  3 2026/11/15       (numero de reserva, nueva fecha)
+    ESPERAR       1.5                (pausa en segundos)
 """
 import time
 
@@ -14,7 +16,8 @@ from config import E_mensaje as m
 def interpretar_linea(linea):
     """
     Convierte una linea del archivo en una operacion.
-    Devuelve una tupla: ("CONSULTA", mes) | ("RESERVA", evento, fecha, n) | ("ESPERAR", segundos)
+    Devuelve una tupla: ("CONSULTA", mes) | ("RESERVA", evento, fecha, n)
+                      | ("MODIFICACION", id_reserva, n, fecha) | ("ESPERAR", segundos)
     Lanza ValueError si la linea no tiene el formato esperado.
     """
     partes = linea.split()
@@ -23,6 +26,10 @@ def interpretar_linea(linea):
         return ("CONSULTA", partes[1])
     if orden == "RESERVA" and len(partes) == 4:
         return ("RESERVA", partes[1], partes[2], int(partes[3]))
+    if orden == "MODIFICACION" and len(partes) == 3:
+        if "/" in partes[2]:                       # nueva fecha
+            return ("MODIFICACION", int(partes[1]), None, partes[2])
+        return ("MODIFICACION", int(partes[1]), int(partes[2]), None)
     if orden == "ESPERAR" and len(partes) == 2:
         return ("ESPERAR", float(partes[1]))
     raise ValueError(f"no se entiende '{linea}'")
@@ -66,10 +73,14 @@ def ejecutar_script(cliente, ruta, detalle=False):
             if operacion[0] == "CONSULTA":
                 respuesta, ms = cliente.consultar(operacion[1])
                 descripcion = f"CONSULTA {operacion[1]}"
-            else:
+            elif operacion[0] == "RESERVA":
                 _, evento, fecha, n = operacion
                 respuesta, ms = cliente.reservar(evento, fecha, n)
                 descripcion = f"RESERVA {evento} {fecha} x{n}"
+            else:
+                _, id_reserva, n, fecha = operacion
+                respuesta, ms = cliente.modificar(id_reserva, n, fecha)
+                descripcion = f"MODIFICACION reserva {id_reserva} -> {fecha or f'x{n}'}"
 
             mostrar(cliente, descripcion, respuesta, ms, detalle)
             resumen[respuesta["estado"]] = resumen.get(respuesta["estado"], 0) + 1

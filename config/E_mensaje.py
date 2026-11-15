@@ -29,7 +29,8 @@ class Respuesta(TypedDict):
 CONSULTA = "CONSULTA"
 # datos: {"id_evento": "E1", "fecha": "2026/11/01", "n_asientos": 2}
 RESERVA = "RESERVA"
-# segunda entrega
+# datos: {"id_reserva": 3, "n_asientos": 5}   cambia el numero de asientos
+#     o: {"id_reserva": 3, "fecha": "2026/11/15"}   cambia la fecha (otra ocurrencia del mismo evento)
 MODIFICACION = "MODIFICACION"
 # segunda entrega
 CANCELACION = "CANCELACION"
@@ -41,12 +42,17 @@ CANCELACION = "CANCELACION"
 CONSULTA_DISPONIBILIDAD = "CONSULTA_DISPONIBILIDAD"
 # datos: igual que RESERVA
 AGREGAR_RESERVA = "AGREGAR_RESERVA"
+# datos: {"id_reserva": 3}  -> devuelve la reserva (cliente, evento, fecha, asientos)
+CONSULTAR_RESERVA = "CONSULTAR_RESERVA"
+# datos: igual que MODIFICACION
+MODIFICAR_RESERVA = "MODIFICAR_RESERVA"
 
 
 # Del servicio de cancelaciones al cliente
 NOTIFICACION = "NOTIFICACION"                  # segunda entrega
 
-TIPOS = {CONSULTA, RESERVA, MODIFICACION, CANCELACION,CONSULTA_DISPONIBILIDAD, AGREGAR_RESERVA, NOTIFICACION}
+TIPOS = {CONSULTA, RESERVA, MODIFICACION, CANCELACION, CONSULTA_DISPONIBILIDAD, AGREGAR_RESERVA,
+         CONSULTAR_RESERVA, MODIFICAR_RESERVA, NOTIFICACION}
 
 EXITO = "EXITO" # se hizo lo pedido
 FALLO = "FALLO" # no se pudo por una regla de negocio (sin cupo, no existe...)
@@ -115,7 +121,7 @@ def decodificar(datos: bytes) -> dict:
     return mensaje
 
 if __name__ == "__main__":
-    # python -m comun.mensajes  -> demostracion
+    # python -m config.E_mensaje  -> demostracion
     p = crear_peticion(RESERVA, 7, {"id_evento": "E1", "fecha": "2026/11/01", "n_asientos": 2})
     print("Peticion       :", p)
     print("Codificada     :", codificar(p))

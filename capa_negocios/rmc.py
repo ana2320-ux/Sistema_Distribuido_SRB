@@ -14,6 +14,7 @@ class ServicioRMC:
         self.operaciones = {
             m.CONSULTA: self.consultar_eventos,
             m.RESERVA: self.reservar,
+            m.MODIFICACION: self.modificar,
         }
 
     def atender(self, peticion):
@@ -58,3 +59,41 @@ class ServicioRMC:
         agregar = m.crear_peticion(m.AGREGAR_RESERVA, peticion["id_cliente"], datos, peticion["uuid"])
         # 4. responder lo que diga la persistencia (EXITO o FALLO SIN_CUPO)
         return self.persistencia.enviar(agregar, reintentar=False)
+
+    # MODIFICACION: {"id_reserva": 3, "n_asientos": 5}  o  {"id_reserva": 3, "fecha": "2026/11/15"}
+    def modificar(self, peticion):
+        datos = peticion.get("datos", {})
+        cambia_fecha = "fecha" in datos
+        if not cambia_fecha:
+            n_asientos = datos.get("n_asientos")
+            if not isinstance(n_asientos, int) or isinstance(n_asientos, bool) or n_asientos <= 0:
+                return m.crear_respuesta(peticion, m.ERROR, m.DATO_INVALIDO,
+                                         {"razon": f"n_asientos debe ser un entero mayor que 0: {n_asientos}"})
+
+        # 1. buscar la reserva (mismo uuid, para seguirla en los logs)
+        consulta = m.crear_peticion(m.CONSULTAR_RESERVA, peticion["id_cliente"],
+                                    {"id_reserva": datos.get("id_reserva")}, peticion["uuid"])
+        reserva = self.persistencia.enviar(consulta)
+        if reserva["estado"] != m.EXITO:
+            return reserva                 # NO_EXISTE o DATO_INVALIDO
+        actual = reserva["datos"]
+
+        # 2. consultar la disponibilidad: en la nueva fecha, o de mas asientos en la misma
+        fecha = datos["fecha"] if cambia_fecha else actual["fecha"]
+        faltan = actual["n_asientos"] if cambia_fecha else n_asientos - actual["n_asientos"]
+        if faltan > 0:
+            consulta = m.crear_peticion(m.CONSULTA_DISPONIBILIDAD, peticion["id_cliente"],
+                                        {"id_evento": actual["id_evento"], "fecha": fecha}, peticion["uuid"])
+            disponibilidad = self.persistencia.enviar(consulta)
+            if disponibilidad["estado"] != m.EXITO:
+                return disponibilidad      # la nueva fecha no existe (evento de una sola ocurrencia)
+            libres = disponibilidad["datos"]["libres"]
+            if libres < faltan:
+                return m.crear_respuesta(peticion, m.FALLO, m.SIN_CUPO,
+                                         {"razon": f"hay {libres} puestos libres, se necesitan {faltan}"})
+
+        # 3. aplicar el cambio. La persistencia vuelve a verificar el cupo en la misma transaccion;
+        #    si no se puede, no cambia nada y el cliente queda como estaba.
+        modificar = m.crear_peticion(m.MODIFICAR_RESERVA, peticion["id_cliente"], datos, peticion["uuid"])
+        # 4. responder lo que diga la persistencia (EXITO o FALLO)
+        return self.persistencia.enviar(modificar, reintentar=False)

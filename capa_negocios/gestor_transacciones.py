@@ -14,8 +14,8 @@ from config import configuracion as config
 from config import E_mensaje as m
 from capa_negocios.metricas import RegistroMetricas
 
-# Peticiones que el canal sincrono acepta en la primera entrega
-TIPOS_SINCRONOS = {m.CONSULTA, m.RESERVA}
+# Peticiones que van por el canal sincrono (al RMC)
+TIPOS_SINCRONOS = {m.CONSULTA, m.RESERVA, m.MODIFICACION}
 
 
 def log(texto):

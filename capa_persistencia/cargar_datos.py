@@ -3,7 +3,7 @@ Inicializa la base de datos con el caso del enunciado o con un archivo JSON.
 
 Uso (desde la raiz del proyecto):
     python -m capa_persistencia.cargar_datos                       # 50 eventos de noviembre 2026
-    python -m capa_persistencia.cargar_datos pruebas/caso.json      # caso del profesor
+    python -m capa_persistencia.cargar_datos pruebas/ejemplo.json   # caso de prueba propio
 """
 import json
 import sys

@@ -5,9 +5,15 @@ Tablas:
   evento      (id, nombre, tipo_evento)
   ocurrencia  (id, evento_id, fecha, capacidad, puestos_ocupados)
   reserva     (id, id_cliente, ocurrencia_id, numero_puestos, activa)
+  operacion   (uuid, tipo, datos)  operaciones de escritura ya hechas, por uuid de la peticion
 
 Las fechas se guardan como texto 'AAAA/MM/DD', el mismo formato del protocolo.
+
+La tabla operacion hace idempotentes las escrituras: si la misma peticion llega dos veces
+(porque un servicio se cayo y se reintento), la segunda vez se devuelve el resultado guardado
+y no se repite la operacion.
 """
+import json
 import sqlite3
 from config import configuracion
 
@@ -35,6 +41,12 @@ CREATE TABLE IF NOT EXISTS reserva (
     numero_puestos INTEGER NOT NULL CHECK (numero_puestos > 0),
     activa         INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS operacion (
+    uuid  TEXT PRIMARY KEY,
+    tipo  TEXT NOT NULL,
+    datos TEXT NOT NULL
+);
 """
 
 class BaseDatos:
@@ -50,6 +62,7 @@ class BaseDatos:
         """Borra todos los datos y deja las tablas vacias."""
         with self.conexion:
             self.conexion.executescript("""
+                DROP TABLE IF EXISTS operacion;
                 DROP TABLE IF EXISTS reserva;
                 DROP TABLE IF EXISTS ocurrencia;
                 DROP TABLE IF EXISTS evento;
@@ -98,7 +111,35 @@ class BaseDatos:
             raise NoExiste(f"{id_evento} no tiene ocurrencia el {fecha}")
         return dict(fila)
 
-    def agregar_reserva(self, id_cliente, id_evento, fecha, n_asientos):
+    def operacion_hecha(self, uuid):
+        """Datos de la respuesta si la peticion con ese uuid ya se aplico; None si no."""
+        fila = self.conexion.execute("SELECT datos FROM operacion WHERE uuid = ?", (uuid,)).fetchone()
+        return json.loads(fila["datos"]) if fila else None
+
+    def _registrar_operacion(self, uuid, tipo, datos):
+        """Guarda el resultado de una escritura, dentro de la misma transaccion que la hizo."""
+        if uuid:
+            self.conexion.execute("INSERT INTO operacion (uuid, tipo, datos) VALUES (?, ?, ?)",
+                                  (uuid, tipo, json.dumps(datos)))
+
+    def _ocupar(self, ocurrencia_id, n_asientos, id_evento, fecha):
+        """
+        Suma n_asientos (puede ser negativo) a los ocupados SOLO si caben.
+        Verificar y actualizar es una sola instruccion: otro cliente pudo reservar justo antes.
+        """
+        cursor = self.conexion.execute("""
+            UPDATE ocurrencia
+            SET puestos_ocupados = puestos_ocupados + ?
+            WHERE id = ? AND puestos_ocupados + ? BETWEEN 0 AND capacidad
+        """, (n_asientos, ocurrencia_id, n_asientos))
+        if cursor.rowcount == 0:
+            libres = self.conexion.execute(
+                "SELECT capacidad - puestos_ocupados FROM ocurrencia WHERE id = ?",
+                (ocurrencia_id,)).fetchone()[0]
+            raise SinCupo(f"hay {libres} puestos libres en {id_evento} el {fecha}, "
+                          f"se pidieron {n_asientos}")
+
+    def agregar_reserva(self, id_cliente, id_evento, fecha, n_asientos, uuid=None):
         """
         Ocupa n_asientos y registra la reserva, todo en una transaccion.
         Lanza NoExiste o SinCupo; en ese caso no cambia nada.
@@ -110,26 +151,56 @@ class BaseDatos:
             if fila is None:
                 raise NoExiste(f"{id_evento} no tiene ocurrencia el {fecha}")
             ocurrencia_id = fila["id"]
-
-            # Sumar SOLO si caben. Verificar y actualizar es una sola instruccion,
-            cursor = self.conexion.execute("""
-                UPDATE ocurrencia
-                SET puestos_ocupados = puestos_ocupados + ?
-                WHERE id = ? AND puestos_ocupados + ? <= capacidad
-            """, (n_asientos, ocurrencia_id, n_asientos))
-            if cursor.rowcount == 0:
-                libres = self.conexion.execute(
-                    "SELECT capacidad - puestos_ocupados FROM ocurrencia WHERE id = ?",
-                    (ocurrencia_id,)).fetchone()[0]
-                raise SinCupo(f"hay {libres} puestos libres en {id_evento} el {fecha}, "
-                              f"se pidieron {n_asientos}")
-
+            self._ocupar(ocurrencia_id, n_asientos, id_evento, fecha)
             cursor = self.conexion.execute("""
                 INSERT INTO reserva (id_cliente, ocurrencia_id, numero_puestos)
                 VALUES (?, ?, ?)
             """, (id_cliente, ocurrencia_id, n_asientos))
-            return {"id_reserva": cursor.lastrowid, "id_cliente": id_cliente,
-                    "id_evento": id_evento, "fecha": fecha, "n_asientos": n_asientos}
+            datos = {"id_reserva": cursor.lastrowid, "id_cliente": id_cliente,
+                     "id_evento": id_evento, "fecha": fecha, "n_asientos": n_asientos}
+            self._registrar_operacion(uuid, "AGREGAR_RESERVA", datos)
+            return datos
+
+    def consultar_reserva(self, id_reserva):
+        """La reserva activa con su evento y fecha. Lanza NoExiste si no existe."""
+        fila = self.conexion.execute("""
+            SELECT r.id AS id_reserva, r.id_cliente, o.evento_id AS id_evento, o.fecha,
+                   r.numero_puestos AS n_asientos, o.id AS ocurrencia_id
+            FROM reserva r JOIN ocurrencia o ON o.id = r.ocurrencia_id
+            WHERE r.id = ? AND r.activa = 1
+        """, (id_reserva,)).fetchone()
+        if fila is None:
+            raise NoExiste(f"no existe la reserva {id_reserva}")
+        return dict(fila)
+
+    def modificar_reserva(self, id_reserva, n_asientos=None, fecha=None, uuid=None):
+        """
+        Cambia el numero de asientos de una reserva, o la pasa a otra ocurrencia del mismo
+        evento (misma cantidad de asientos). Todo en una transaccion: si no hay cupo no cambia
+        nada y el cliente queda como estaba. Lanza NoExiste o SinCupo.
+        """
+        with self.conexion:
+            reserva = self.consultar_reserva(id_reserva)
+            id_evento, origen = reserva["id_evento"], reserva["ocurrencia_id"]
+            if fecha is not None:
+                destino = self.conexion.execute(
+                    "SELECT id FROM ocurrencia WHERE evento_id = ? AND fecha = ?",
+                    (id_evento, fecha)).fetchone()
+                if destino is None:
+                    raise NoExiste(f"{id_evento} no tiene ocurrencia el {fecha}")
+                # liberar en la fecha actual y ocupar en la nueva; si no caben, SinCupo deshace todo
+                self._ocupar(origen, -reserva["n_asientos"], id_evento, reserva["fecha"])
+                self._ocupar(destino["id"], reserva["n_asientos"], id_evento, fecha)
+                self.conexion.execute("UPDATE reserva SET ocurrencia_id = ? WHERE id = ?",
+                                      (destino["id"], id_reserva))
+            else:
+                self._ocupar(origen, n_asientos - reserva["n_asientos"], id_evento, reserva["fecha"])
+                self.conexion.execute("UPDATE reserva SET numero_puestos = ? WHERE id = ?",
+                                      (n_asientos, id_reserva))
+            datos = self.consultar_reserva(id_reserva)
+            del datos["ocurrencia_id"]
+            self._registrar_operacion(uuid, "MODIFICAR_RESERVA", datos)
+            return datos
 
 
     def verificar(self):

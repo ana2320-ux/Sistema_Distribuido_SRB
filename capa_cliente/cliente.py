@@ -48,6 +48,11 @@ class Cliente:
     def reservar(self, id_evento, fecha, n_asientos):
         return self.enviar(m.RESERVA, {"id_evento": id_evento, "fecha": fecha, "n_asientos": n_asientos})
 
+    def modificar(self, id_reserva, n_asientos=None, fecha=None):
+        """Cambia el numero de asientos de una reserva, o su fecha (una de las dos cosas)."""
+        cambio = {"fecha": fecha} if fecha is not None else {"n_asientos": n_asientos}
+        return self.enviar(m.MODIFICACION, {"id_reserva": id_reserva, **cambio})
+
     def cerrar(self):
         self.socket.close(linger=0)
         self.contexto.term()

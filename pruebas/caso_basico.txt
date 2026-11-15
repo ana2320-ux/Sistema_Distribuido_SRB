@@ -1,4 +1,10 @@
+# Caso de prueba basico. Se ejecuta con la BD recien cargada (50 eventos de noviembre de 2026):
+#   python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle
+# Las reservas quedan numeradas en el orden en que se aceptan: 1, 2, 3 y 4.
+
 CONSULTA noviembre
+
+# --- Reservas
 RESERVA E1 2026/11/01 3
 RESERVA E1 2026/11/01 2
 RESERVA E1 2026/11/15 100
@@ -13,5 +19,28 @@ RESERVA E77 2026/11/02 1
 RESERVA E2 02-11-2026 1
 # linea mal escrita: el cliente la ignora
 RESERVA E2 2026/11/02
+
+# --- Modificaciones
+# la reserva 1 pasa de 3 a 5 asientos (E1 el 01 queda con 7 ocupados)
+MODIFICACION 1 5
+# la reserva 2 (2 asientos) pasa del 01 al 15 de E1
+# rechazada: el 15 esta lleno; la reserva queda como estaba
+MODIFICACION 2 2026/11/15
+# la reserva 4 (E30) cambia de fecha
+# rechazada: E30 tiene una sola ocurrencia, solo admite cambio de asientos
+MODIFICACION 4 2026/11/16
+# la reserva 4 pasa de 7 a 4 asientos (E30 el 02 queda con 4 ocupados)
+MODIFICACION 4 4
+# rechazada: la reserva 99 no existe
+MODIFICACION 99 2
+# rechazada: asientos invalidos
+MODIFICACION 2 0
+
 ESPERAR 0.5
 CONSULTA noviembre
+
+# Estado final esperado de la BD:
+#   E1  2026/11/01  ocupados 7    (reserva 1 x5 + reserva 2 x2)
+#   E1  2026/11/15  ocupados 100  (reserva 3 x100)
+#   E30 2026/11/02  ocupados 4    (reserva 4 x4)
+#   total: 111 asientos ocupados, 4 reservas activas
