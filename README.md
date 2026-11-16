@@ -72,8 +72,9 @@ Todos los comandos de este documento se ejecutan desde la raíz del proyecto. Co
 
 ## 4. Configuración
 
-El archivo `.env` de la raíz trae las tres IP y los puertos; es el mismo en las tres máquinas.
-`.env.example` es una copia de respaldo.
+El archivo `.env` de la raíz trae los puertos y las direcciones de las tres máquinas; es el mismo en las
+tres. Viene con `127.0.0.1` en las tres direcciones (todo en un solo computador). Para el despliegue,
+en las tres máquinas se escribe la IP de cada capa. `.env.example` es una copia de respaldo.
 
 ```env
 HOST_CAPA_CONSUMIDORES=10.43.99.236
