@@ -106,31 +106,40 @@ Los puertos 5556 y 5557 solo se usan dentro de la máquina 2 y no se abren hacia
 El orden es máquina 3, máquina 2 y máquina 1. Cada proceso va en su propia terminal y se
 detiene con `Ctrl+C`.
 
-### 5.1 Máquina 3 (10.43.99.246): almacenamiento
+### 5.1 Arquitectura base
 
 ```bash
+# Máquina 3 (10.43.99.246)
 python -m capa_persistencia.cargar_datos        # crea la base de datos con el caso del enunciado
-python -m capa_persistencia.main                # Servicio de Persistencia principal, puerto 5558
+python -m capa_persistencia.main                # Servicio de Persistencia, puerto 5558
+
+# Máquina 2 (10.43.100.36)
+python -m capa_negocios.main gt                 # Gestor de Transacciones
+python -m capa_negocios.main rmc                # un RMC
+python -m capa_negocios.main cancelaciones      # Servicio de Cancelaciones
+```
+
+### 5.2 Arquitectura escalable y tolerante a fallas
+
+```bash
+# Máquina 3 (10.43.99.246)
+python -m capa_persistencia.cargar_datos
+python -m capa_persistencia.main                # servicio principal
 python -m capa_persistencia.main lectura        # réplica de lectura, puerto 5559
+
+# Máquina 2 (10.43.100.36)
+python -m capa_negocios.main gt                 # Gestor de Transacciones activo
+python -m capa_negocios.main gt                 # de respaldo: queda en espera
+python -m capa_negocios.main rmc --con-replica  # RMC 1
+python -m capa_negocios.main rmc --con-replica  # RMC 2
+python -m capa_negocios.main rmc --con-replica  # RMC 3
+python -m capa_negocios.main cancelaciones
 ```
 
 `cargar_datos` borra y recrea la base: 50 eventos de noviembre de 2026, los primeros 20 con dos
 ocurrencias y el resto con una (70 ocurrencias), 100 asientos cada una. También acepta otro
 catálogo en JSON (`python -m capa_persistencia.cargar_datos pruebas/ejemplo.json`) y se puede
 ejecutar con los servicios en marcha.
-
-### 5.2 Máquina 2 (10.43.100.36): servicios de negocio
-
-```bash
-python -m capa_negocios.main gt                 # Gestor de Transacciones activo
-python -m capa_negocios.main gt                 # de respaldo: queda en espera
-python -m capa_negocios.main rmc --con-replica  # RMC 1
-python -m capa_negocios.main rmc --con-replica  # RMC 2
-python -m capa_negocios.main rmc --con-replica  # RMC 3
-python -m capa_negocios.main cancelaciones      # Servicio de Cancelaciones
-```
-
-El número de RMC es libre: cada `rmc` que se arranca se suma al reparto.
 
 ### 5.3 Clientes (máquina 1, 10.43.99.236)
 
@@ -189,7 +198,7 @@ el mismo en todas las capas.
 
 ## 7. Tolerancia a fallas
 
-Con el sistema en marcha (secciones 5.1 y 5.2) y una carga corriendo (sección 5.3):
+Con la arquitectura de la sección 5.2 en marcha y una carga corriendo (sección 5.3):
 
 | Falla | Cómo se provoca | Qué pasa |
 |---|---|---|
@@ -237,17 +246,19 @@ Cada escenario se corre tres veces, 150 segundos, con 20 peticiones por minuto p
 | 2 | 5 | 3 solo consultan, 2 reservan y modifican |
 | 3 | 8 | 4 solo consultan, 4 reservan y modifican |
 
-1. Máquinas 3 y 2: el sistema en marcha (secciones 5.1 y 5.2).
-2. Máquina 1: `bash scripts/medir.sh`. El script corre los tres escenarios, tres corridas de
-   cada uno, y se detiene antes de cada escenario para reiniciar la base de datos en la
+1. Máquinas 3 y 2: arquitectura base en marcha (sección 5.1).
+2. Máquina 1: `bash scripts/medir.sh base`. El script corre los tres escenarios, tres corridas
+   de cada uno, y se detiene antes de cada escenario para reiniciar la base de datos en la
    máquina 3 (`python -m capa_persistencia.cargar_datos`).
-3. El CSV del Gestor de Transacciones (`resultados/gt_metricas.csv`, en la máquina 2) se copia
+3. Máquinas 3 y 2: se detiene todo y se levanta la arquitectura escalable (sección 5.2).
+4. Máquina 1: `bash scripts/medir.sh escalable`.
+5. El CSV del Gestor de Transacciones (`resultados/gt_metricas.csv`, en la máquina 2) se copia
    a la máquina 1:
    `scp 10.43.100.36:<carpeta del proyecto>/resultados/gt_metricas.csv resultados/`
-4. Máquina 1: `python -m herramientas.analizar_metricas`
+6. Máquina 1: `python -m herramientas.analizar_metricas`
 
 Un escenario suelto se lanza con
-`python -m capa_cliente.escenarios --escenario 3 --etiqueta escalable --corrida 1`.
+`python -m capa_cliente.escenarios --escenario 3 --etiqueta base --corrida 1`.
 
 El análisis imprime la tabla, la guarda en `resultados/resumen.csv` y deja los gráficos en
 `resultados/graficos/`. Para cada arquitectura, número de clientes y operación calcula:
