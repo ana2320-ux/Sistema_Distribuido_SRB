@@ -1,0 +1,42 @@
+@startuml
+!include _estilo.puml
+title Diagrama de despliegue - Arquitectura final (escalable y tolerante a fallas)
+left to right direction
+
+node "Máquina 1 - Consumidores\n10.43.99.236" as m1 {
+  component "Cliente 1..N\n(casos de prueba y\ngenerador de carga)" as cli
+  component "Receptor de notificaciones\n(PULL :6000 + id)" as notif
+}
+
+node "Máquina 2 - Servicios de negocio\n10.43.100.36 (NBIG333)" as m2 {
+  component "Gestor de Transacciones\nactivo\n(ROUTER :5555, DEALER :5556)" as gt
+  component "Gestor de Transacciones\nde respaldo (en espera)" as gt2
+  component "RMC 1" as rmc1
+  component "RMC 2" as rmc2
+  component "RMC N" as rmc3
+  component "Servicio de Cancelaciones\ny Notificaciones (PULL :5557)" as canc
+}
+
+node "Máquina 3 - Almacenamiento\n10.43.99.246 (NBIG305)" as m3 {
+  component "Servicio de Persistencia\nprincipal (REP :5558)" as sp
+  component "Réplica de lectura\n(REP :5559)" as spl
+  database "SQLite\ndatos/srb.db\n(modo WAL)" as bd
+}
+
+cli --> gt : REQ/REP\nconsulta, reserva,\nmodificación, cancelación
+gt ..> gt2 : toma los puertos\nsi el activo cae
+gt --> rmc1 : ROUTER/DEALER
+gt --> rmc2
+gt --> rmc3
+gt --> canc : PUSH/PULL\ncancelación
+rmc1 --> sp : REQ/REP\nescrituras
+rmc1 --> spl : REQ/REP\nconsultas
+rmc2 --> sp
+rmc2 --> spl
+rmc3 --> sp
+rmc3 --> spl
+canc --> sp : REQ/REP\nliberar asientos
+canc --> notif : PUSH/PULL\nnotificación
+sp --> bd : lee y escribe
+spl --> bd : solo lee
+@enduml

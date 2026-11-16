@@ -1,0 +1,5 @@
+evento,descripcion,peticiones,errores,max_ms,consistencia
+gt,Cae el Gestor de Transacciones activo; entra el de respaldo,237,0,1059,Consistente; 17 notificaciones de 17 cancelaciones
+rmc1,Cae uno de los tres RMC,240,0,28,Consistente; 17 notificaciones de 17 cancelaciones
+cancelaciones,Cae el Servicio de Cancelaciones y se arranca de nuevo 10 s después,240,0,25,Consistente; 17 notificaciones de 17 cancelaciones
+lectura,Cae la réplica de lectura,234,0,1685,Consistente; 16 notificaciones de 16 cancelaciones

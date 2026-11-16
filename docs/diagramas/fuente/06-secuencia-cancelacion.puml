@@ -1,0 +1,31 @@
+@startuml
+!include _estilo.puml
+title Diagrama de secuencia - Cancelación asíncrona con notificación
+
+participant Cliente as C
+participant "Receptor de\nnotificaciones\n(hilo del cliente)" as N
+participant "Gestor de\nTransacciones" as GT
+participant "Servicio de\nCancelaciones" as SC
+participant "Persistencia\nprincipal" as SP
+database SQLite as BD
+
+C -> GT : CANCELACION {id_reserva, notificar_a} (REQ)
+GT -> GT : revisar el mensaje
+GT ->> SC : la misma petición (PUSH, sin esperar)
+GT --> C : ACK inmediato (REP)
+note right of C
+  El cliente sigue con otras operaciones.
+end note
+
+SC -> SP : LIBERAR_RESERVA (mismo uuid) (REQ)
+SP -> BD : una transacción:\nUPDATE ocupados - n\nUPDATE reserva SET activa = 0\nINSERT operacion
+BD --> SP : commit
+SP --> SC : EXITO {reserva liberada}\no FALLO NO_EXISTE
+SC ->> N : NOTIFICACION (PUSH a notificar_a)
+N -> N : guardar y mostrar\nla notificación
+
+note over GT, SC
+  Si el Servicio de Cancelaciones está caído, ZeroMQ guarda en el Gestor de
+  Transacciones las cancelaciones aceptadas y las entrega cuando vuelve.
+end note
+@enduml

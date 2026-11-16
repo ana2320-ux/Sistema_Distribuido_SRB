@@ -1,0 +1,111 @@
+@startuml
+!include _estilo.puml
+title Diagrama de clases - Código Python
+hide empty members
+
+package capa_cliente {
+  class Cliente {
+    +id_cliente : int
+    +notificaciones : list
+    +consultar(mes)
+    +reservar(id_evento, fecha, n_asientos)
+    +modificar(id_reserva, n_asientos, fecha)
+    +cancelar(id_reserva)
+    +esperar_notificaciones(cantidad)
+    +enviar(tipo, datos)
+    -_recibir_notificaciones()
+  }
+  class "script" as script <<módulo>> {
+    +interpretar_linea(linea)
+    +ejecutar_script(cliente, ruta)
+  }
+  class "carga" as carga <<módulo>> {
+    +generar_carga(cliente, csv, duracion,\n  por_minuto, porcentajes)
+  }
+  class "escenarios" as esc <<módulo>> {
+    +ESCENARIOS
+    +main()
+  }
+}
+
+package capa_negocios {
+  class GestorTransacciones {
+    -frontend : ROUTER
+    -backend : DEALER
+    -cancelaciones : PUSH
+    -pendientes : dict
+    +ejecutar()
+    +atender_cliente()
+    +atender_cancelacion(frames, peticion)
+    +atender_rmc()
+    +revisar_pendientes()
+  }
+  class ServicioRMC {
+    +atender(peticion)
+    +consultar_eventos(peticion)
+    +reservar(peticion)
+    +modificar(peticion)
+  }
+  class ClientePersistencia {
+    +principal : str
+    +lecturas : str
+    +enviar(peticion)
+  }
+  class RegistroMetricas {
+    +registrar(tipo, estado, motivo, ms, cliente, uuid)
+  }
+  class "main" as nmain <<módulo>> {
+    +arrancar_gt()
+    +arrancar_rmc()
+    +arrancar_cancelaciones()
+  }
+}
+
+package capa_persistencia {
+  class ServicioPersistencia {
+    +atender(peticion)
+    +consultar_eventos(peticion)
+    +consultar_disponibilidad(peticion)
+    +agregar_reserva(peticion)
+    +consultar_reserva(peticion)
+    +modificar_reserva(peticion)
+    +liberar_reserva(peticion)
+  }
+  class BaseDatos {
+    +consultar_mes(numero_mes)
+    +disponibilidad(id_evento, fecha)
+    +agregar_reserva(cliente, evento, fecha, n, uuid)
+    +consultar_reserva(id_reserva)
+    +modificar_reserva(id_reserva, n, fecha, uuid)
+    +liberar_reserva(id_reserva, uuid)
+    +operacion_hecha(uuid)
+    +verificar()
+  }
+}
+
+package config {
+  class "E_mensaje" as msj <<módulo>> {
+    +crear_peticion(tipo, id_cliente, datos, uuid)
+    +crear_respuesta(peticion, estado, motivo, datos)
+    +codificar(mensaje)
+    +decodificar(bytes)
+  }
+}
+
+esc ..> carga : lanza un proceso\npor cliente
+carga --> Cliente
+script --> Cliente
+Cliente --> GestorTransacciones : REQ/REP
+GestorTransacciones --> ServicioRMC : ROUTER/DEALER
+GestorTransacciones ..> nmain : PUSH/PULL\n(Servicio de Cancelaciones)
+GestorTransacciones *-- RegistroMetricas
+ServicioRMC --> ClientePersistencia
+nmain --> ClientePersistencia
+ClientePersistencia --> ServicioPersistencia : REQ/REP
+ServicioPersistencia *-- BaseDatos
+nmain ..> Cliente : PUSH/PULL\nnotificación
+Cliente ..> msj
+GestorTransacciones ..> msj
+ServicioRMC ..> msj
+ServicioPersistencia ..> msj
+@enduml

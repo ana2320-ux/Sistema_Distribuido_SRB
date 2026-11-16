@@ -8,6 +8,11 @@ Lanza los escenarios de la Tabla 1 del enunciado. Cada cliente es un proceso apa
 Uso (en la maquina de clientes, desde la raiz):
     python -m capa_cliente.escenarios --escenario 1 --etiqueta base
     python -m capa_cliente.escenarios --escenario 3 --etiqueta base --duracion 150 --por-minuto 20
+    python -m capa_cliente.escenarios --escenario 1 --etiqueta escalable --corrida 2
+
+Cada corrida queda en resultados/<etiqueta>_<N>clientes/corrida_<n>/, un CSV por cliente.
+La semilla del azar de cada cliente depende de la corrida y de su id: la misma corrida
+envia las mismas operaciones en la arquitectura base y en la escalable.
 """
 import argparse
 import subprocess
@@ -29,10 +34,11 @@ def main():
     parser.add_argument("--etiqueta", default="base", help="nombre de la corrida: base, escalable...")
     parser.add_argument("--duracion", type=float, default=150, help="segundos (el enunciado pide 2 a 3 min)")
     parser.add_argument("--por-minuto", type=float, default=20, help="peticiones por minuto por cliente")
+    parser.add_argument("--corrida", type=int, default=1, help="numero de la repeticion (1, 2, 3...)")
     args = parser.parse_args()
 
     total = sum(cantidad for cantidad, _, _ in ESCENARIOS[args.escenario])
-    carpeta = config.RAIZ / "resultados" / f"{args.etiqueta}_{total}clientes"
+    carpeta = config.RAIZ / "resultados" / f"{args.etiqueta}_{total}clientes" / f"corrida_{args.corrida}"
     carpeta.mkdir(parents=True, exist_ok=True)
     for viejo in carpeta.glob("cliente_*.csv"):
         viejo.unlink()                     # que no se mezclen corridas anteriores
@@ -45,10 +51,12 @@ def main():
             comando = [sys.executable, "-m", "capa_cliente.main", "--id", str(id_cliente), "--carga",
                        "--duracion", str(args.duracion), "--por-minuto", str(args.por_minuto),
                        "--consultas", str(pct_consultas), "--modificaciones", str(pct_modificaciones),
+                       "--semilla", str(args.corrida * 100 + id_cliente),
                        "--salida", str(carpeta / f"cliente_{id_cliente}.csv")]
             procesos.append(subprocess.Popen(comando, cwd=config.RAIZ))
 
-    print(f"Escenario {args.escenario}: {total} clientes durante {args.duracion:g} s...", flush=True)
+    print(f"Escenario {args.escenario}, corrida {args.corrida}: {total} clientes durante {args.duracion:g} s...",
+          flush=True)
     try:
         for p in procesos:
             p.wait()
@@ -57,7 +65,7 @@ def main():
             p.terminate()
         raise
     print(f"Listo. Resultados en {carpeta}")
-    print(f"Analizar:  python -m herramientas.analizar_metricas {carpeta} --gt <gt_metricas.csv>")
+    print("Analizar:  python -m herramientas.analizar_metricas")
 
 
 if __name__ == "__main__":

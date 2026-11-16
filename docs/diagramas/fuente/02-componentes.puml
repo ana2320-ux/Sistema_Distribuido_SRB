@@ -1,0 +1,45 @@
+@startuml
+!include _estilo.puml
+title Diagrama de componentes - Arquitectura final
+left to right direction
+
+package "Capa de consumidores" {
+  [Cliente] as cli
+  [Generador de carga\ny casos de prueba] as carga
+  [Receptor de\nnotificaciones] as notif
+}
+
+package "Capa de servicios de negocio" {
+  [Gestor de Transacciones\n(activo + respaldo)] as gt
+  [RMC\n(réplicas)] as rmc
+  [Servicio de Cancelaciones\ny Notificaciones] as canc
+  [Registro de métricas\n(gt_metricas.csv)] as met
+}
+
+package "Capa de almacenamiento" {
+  [Servicio de Persistencia\nprincipal] as sp
+  [Réplica de lectura] as spl
+  database "SQLite (WAL)" as bd
+}
+
+carga --> cli : usa
+cli --> gt : REQ/REP :5555\npeticiones síncronas y cancelación
+gt --> rmc : ROUTER/DEALER :5556\ncanal síncrono
+gt --> canc : PUSH/PULL :5557\ncanal asíncrono
+gt --> met : una fila por transacción
+rmc --> sp : REQ/REP :5558\nAGREGAR_RESERVA, MODIFICAR_RESERVA
+rmc --> spl : REQ/REP :5559\nCONSULTA, CONSULTA_DISPONIBILIDAD,\nCONSULTAR_RESERVA
+canc --> sp : REQ/REP :5558\nLIBERAR_RESERVA
+canc --> notif : PUSH/PULL :6000+id\nNOTIFICACION
+sp --> bd
+spl --> bd
+
+note bottom of gt
+  Reenvía a otro RMC la petición que no
+  tuvo respuesta (mismo uuid, reintento).
+end note
+note bottom of sp
+  Escrituras idempotentes: la tabla operacion
+  guarda el resultado por uuid.
+end note
+@enduml

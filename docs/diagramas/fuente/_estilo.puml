@@ -1,0 +1,36 @@
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam ArrowColor #334155
+skinparam ArrowFontSize 11
+skinparam NoteBackgroundColor #FEF9C3
+skinparam NoteBorderColor #CA8A04
+skinparam node {
+  BackgroundColor #F1F5F9
+  BorderColor #475569
+}
+skinparam component {
+  BackgroundColor #DBEAFE
+  BorderColor #1D4ED8
+}
+skinparam database {
+  BackgroundColor #FEF3C7
+  BorderColor #B45309
+}
+skinparam class {
+  BackgroundColor #F8FAFC
+  BorderColor #475569
+  ArrowColor #334155
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+}
+skinparam sequence {
+  ParticipantBackgroundColor #DBEAFE
+  ParticipantBorderColor #1D4ED8
+  LifeLineBorderColor #64748B
+  GroupBorderColor #94A3B8
+  GroupBackgroundColor #F1F5F9
+}

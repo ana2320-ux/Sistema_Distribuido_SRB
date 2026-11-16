@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.png binary
+*.pdf binary
+*.docx binary
+
+# No van en el .zip de la entrega
+.gitattributes export-ignore
+.gitignore export-ignore
+docs/informe/*.docx export-ignore
+docs/informe/generar_informe.py export-ignore
+docs/informe/textos.py export-ignore
