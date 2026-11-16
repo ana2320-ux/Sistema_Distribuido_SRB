@@ -9,6 +9,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "locust>=2.30",
     "matplotlib>=3.9",
     "mypy>=2.4.0",
     "pytest>=8",

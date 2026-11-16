@@ -33,7 +33,7 @@ clientes (PULL :6000+id) ◄─ PUSH ─ Cancelaciones (PULL :5557) ── REQ �
 
 | Máquina | IP | Capa | Procesos | Puertos |
 |---|---|---|---|---|
-| 1 | 10.43.99.236 | Consumidores | Clientes, casos de prueba y generador de carga | 6000 + id del cliente (notificaciones) |
+| 1 | 10.43.99.236 | Consumidores | Clientes, casos de prueba y carga con Locust | 6000 + id del cliente (notificaciones) |
 | 2 | 10.43.100.36 | Negocio | Gestor de Transacciones (activo y de respaldo), RMC (una o varias réplicas) y Servicio de Cancelaciones | 5555 (clientes), 5556 (RMC), 5557 (cancelaciones) |
 | 3 | 10.43.99.246 | Almacenamiento | Servicio de Persistencia, réplica de lectura y base de datos SQLite | 5558 (principal), 5559 (réplica de lectura) |
 
@@ -48,12 +48,13 @@ Componentes de la arquitectura final:
 | Reintento del cliente | Tolerancia a fallas | Si no hay respuesta, el cliente reenvía la petición una vez, con el mismo `uuid` |
 | Escrituras idempotentes | Tolerancia a fallas | La persistencia guarda cada escritura por el `uuid` de la petición: una petición repetida devuelve el mismo resultado y no se aplica dos veces |
 | Cola de cancelaciones | Tolerancia a fallas | Si el Servicio de Cancelaciones está caído, las cancelaciones aceptadas esperan y se procesan cuando vuelve |
+| Kubernetes (k3s) | Escalabilidad y tolerancia a fallas | Cada servicio es un Deployment con réplicas; las tres máquinas son nodos y `nodeSelector` asigna una capa a cada uno; las probes y el reinicio de contenedores reemplazan el arranque manual (sección 5.4) |
 
 ## 3. Requisitos
 
 - Ubuntu 22.04 y Python 3.12 o superior en las tres máquinas.
-- Dependencias: `pyzmq` y `python-dotenv`. Para las pruebas y el análisis de métricas, además
-  `pytest` y `matplotlib`. SQLite viene con Python.
+- Dependencias: `pyzmq` y `python-dotenv`. Para la carga, las pruebas y el análisis de métricas,
+  además `locust`, `pytest` y `matplotlib`. SQLite viene con Python.
 
 Con [uv](https://docs.astral.sh/uv/), desde la raíz del proyecto:
 
@@ -164,22 +165,120 @@ ESPERAR       1.5                 # pausa en segundos
 Las reservas se numeran en el orden en que se aceptan (1, 2, 3...). `pruebas/caso_basico.txt`
 trae en sus comentarios el resultado de cada operación y el estado final de la base de datos.
 
-**Carga continua de un cliente:**
+**Carga de los clientes (Locust).** La carga se genera con Locust. Cada cliente es un proceso de
+Locust con un solo usuario virtual (`-u 1`): envía una petición por ZeroMQ al Gestor de
+Transacciones, espera la respuesta, la registra y espera hasta completar el ritmo pedido (por
+defecto 20 peticiones por minuto). El tipo de operación, el evento y el número de asientos se
+eligen al azar con una semilla fija. Las modificaciones y cancelaciones son de reservas propias
+del cliente.
 
 ```bash
-python -m capa_cliente.main --id 1 --carga --duracion 150 --por-minuto 20 --consultas 70 --modificaciones 30 --cancelaciones 10 --semilla 42
+python -m locust -f capa_cliente/locustfile.py --headless -u 1 -r 1 -t 150s \
+    --id-cliente 1 --por-minuto 20 --consultas 70 --modificaciones 30 --cancelaciones 10 \
+    --semilla 101 --salida resultados/cliente_1.csv
 ```
 
 | Parámetro | Significado | Por defecto |
 |---|---|---|
-| `--id` | Identificador del cliente (entero mayor que 0); cada cliente en marcha usa uno distinto | obligatorio |
-| `--duracion` | Segundos de carga | 150 |
+| `-t` | Duración de la corrida (2 a 3 minutos: `120s` a `180s`) | obligatorio |
+| `--id-cliente` | Identificador del cliente (entero mayor que 0); cada cliente en marcha usa uno distinto | 1 |
 | `--por-minuto` | Peticiones por minuto | 20 |
 | `--consultas` | Porcentaje de consultas; el resto son escrituras | 70 |
 | `--modificaciones` | De las escrituras, porcentaje que modifica una reserva propia | 0 |
 | `--cancelaciones` | De las escrituras, porcentaje que cancela una reserva propia; las demás son reservas | 0 |
-| `--semilla` | Semilla del azar, para repetir una corrida | aleatoria |
-| `--salida` | CSV de resultados | `resultados/cliente_<id>.csv` |
+| `--semilla` | Semilla del azar, para repetir una corrida | sin semilla |
+| `--salida` | CSV del cliente | `resultados/cliente_<id>.csv` |
+
+El número de clientes se controla lanzando un proceso por cliente; los escenarios de la Tabla 1
+los lanza `capa_cliente.escenarios` (sección 9).
+
+### 5.4 Despliegue en Kubernetes (k3s)
+
+Cada servicio corre en un contenedor de la imagen `srb:2`, desplegado como Deployment. Las tres
+máquinas son nodos del clúster y un `nodeSelector` fija la capa de cada carga. Los servicios se
+localizan por el nombre DNS de su Service (`persistencia`, `gt`, `cancelaciones`); el `.env` de la
+imagen trae `127.0.0.1` y los manifiestos de `k8s/` ponen las variables reales, que tienen prioridad.
+El código de la aplicación es el mismo que en las secciones 5.1 y 5.2.
+
+| Manifiesto | Contenido | Nodo |
+|---|---|---|
+| `k8s/00-base.yaml` | Namespace `srb` y ConfigMap con puertos, `TIMEOUT_MS` y `BD_RUTA` | |
+| `k8s/almacenamiento.yaml` | Deployment `persistencia` (1 réplica, un pod con los contenedores `principal` y `lectura` sobre el mismo volumen `hostPath` `/var/tmp/srb`) y su Service | `capa=almacenamiento` |
+| `k8s/negocio.yaml` | `gt` (1 réplica, un pod con los contenedores `activo` y `respaldo`), `rmc` (3 réplicas), `cancelaciones` (1 réplica) y sus Services | `capa=negocio` |
+| `k8s/consumidores.yaml` | `clientes`: pod en reposo desde el que se lanzan casos de prueba, carga y escenarios | `capa=consumidores` |
+
+La persistencia lleva una sola réplica porque SQLite admite un único escritor. Los dos contenedores
+del gestor comparten la red del pod: el segundo encuentra los puertos ocupados, queda en espera y
+toma el control cuando el primero cae; el kubelet reinicia el caído, que pasa a ser el respaldo. Los
+contenedores que abren puerto llevan probes `tcpSocket` (liveness y readiness); el RMC no abre puerto
+y Kubernetes solo reinicia su contenedor si el proceso muere.
+
+**Instalación de k3s** (máquina 2 como servidor; máquinas 1 y 3 como agentes):
+
+```bash
+# Máquina 2 (10.43.100.36)
+curl -sfL https://get.k3s.io | sh -
+sudo cat /var/lib/rancher/k3s/server/node-token        # valor de K3S_TOKEN
+
+# Máquinas 1 y 3
+curl -sfL https://get.k3s.io | K3S_URL=https://10.43.100.36:6443 K3S_TOKEN=<token> sh -
+```
+
+**Etiquetas de los nodos** (nombres según `sudo k3s kubectl get nodes`), desde la máquina 2:
+
+```bash
+sudo k3s kubectl label node <nodo-maquina-1> capa=consumidores
+sudo k3s kubectl label node <nodo-maquina-2> capa=negocio
+sudo k3s kubectl label node <nodo-maquina-3> capa=almacenamiento
+```
+
+En adelante `kubectl` se ejecuta en la máquina 2 (`sudo k3s kubectl`, o con el alias `kubectl`).
+
+**Imagen.** Se construye en una máquina con docker y se importa en cada nodo (los manifiestos usan
+`imagePullPolicy: Never`):
+
+```bash
+bash scripts/k8s-imagen.sh                  # crea srb.tar en la carpeta del proyecto (NFS)
+sudo k3s ctr images import srb.tar          # en cada una de las tres máquinas
+```
+
+**Despliegue y comprobación:**
+
+```bash
+kubectl apply -f k8s/
+kubectl -n srb get pods -o wide             # 7 pods, cada uno en el nodo de su capa
+kubectl -n srb exec deploy/persistencia -c principal -- python -m capa_persistencia.cargar_datos
+kubectl -n srb exec deploy/persistencia -c principal -- python -m herramientas.ver_bd
+```
+
+**Casos de prueba, carga y escenarios** desde el pod de clientes:
+
+```bash
+kubectl -n srb exec deploy/clientes -- python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle
+kubectl -n srb exec deploy/clientes -- python -m capa_cliente.escenarios --escenario 1 --etiqueta k8s --corrida 1
+```
+
+`resultados/` del pod de clientes y del gestor son la carpeta compartida del proyecto, así que
+`gt_metricas.csv` y los CSV de los clientes quedan juntos para `python -m herramientas.analizar_metricas`.
+
+**Bitácoras:**
+
+```bash
+kubectl -n srb logs deploy/persistencia -c principal
+kubectl -n srb logs deploy/gt -c activo        # y -c respaldo
+kubectl -n srb logs -l app=rmc --prefix
+kubectl -n srb logs deploy/cancelaciones
+```
+
+**Tolerancia a fallas y escalabilidad** (con una carga corriendo):
+
+```bash
+kubectl -n srb get pods -l app=rmc
+kubectl -n srb delete pod <pod-rmc>                    # un RMC: otro termina la operación y el Deployment crea el reemplazo
+kubectl -n srb exec deploy/gt -c activo -- python -c "import os, signal; os.kill(1, signal.SIGINT)"   # gestor activo: el respaldo toma el control y el contenedor caído se reinicia como respaldo
+kubectl -n srb scale deploy/rmc --replicas=6           # más RMC, sin tocar el resto
+kubectl -n srb get pods -w
+```
 
 ## 6. Estado de la base de datos y bitácoras
 
@@ -313,13 +412,15 @@ Respuesta: {"uuid": "...", "estado": "EXITO", "motivo": null, "datos": {...}}
 ## 12. Estructura del proyecto
 
 ```
-capa_cliente/        Cliente, casos de prueba, generador de carga y escenarios de la Tabla 1
+capa_cliente/        Cliente, casos de prueba, carga con Locust y escenarios de la Tabla 1
 capa_negocios/       Gestor de Transacciones, RMC, Servicio de Cancelaciones y métricas
 capa_persistencia/   Servicio de Persistencia (principal y réplica de lectura), SQLite y carga de datos
 config/              Lectura del .env y definición de los mensajes (protocolo)
 herramientas/        ver_bd (estado de la base de datos) y analizar_metricas
 pruebas/             Pruebas de pytest y casos de prueba (caso_basico.txt, ejemplo.json)
-scripts/             protocolo-pruebas.sh y medir.sh
+scripts/             protocolo-pruebas.sh, medir.sh y k8s-imagen.sh
+k8s/                 Manifiestos de Kubernetes (k3s): una capa por archivo
+Dockerfile           Imagen srb:2 de todos los servicios
 docs/                Informe y diagramas de la arquitectura final
 resultados/          CSV de métricas y gráficos (se crea al correr)
 ```

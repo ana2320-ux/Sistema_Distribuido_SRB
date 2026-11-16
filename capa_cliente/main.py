@@ -1,18 +1,13 @@
 """
-Proceso cliente. Dos modos:
+Proceso cliente para casos de prueba (archivo de operaciones):
 
-  Caso de prueba (archivo de operaciones):
     python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt [--detalle]
 
-  Carga continua:
-    python -m capa_cliente.main --id 1 --carga --duracion 150 --por-minuto 20 --consultas 70 \
-                                --modificaciones 30 --cancelaciones 10
+La carga continua de los escenarios la genera Locust: capa_cliente/locustfile.py.
 """
 import argparse
 import sys
 
-from config import configuracion as config
-from capa_cliente.carga import generar_carga
 from capa_cliente.cliente import Cliente
 from capa_cliente.script import ejecutar_script
 
@@ -20,49 +15,21 @@ from capa_cliente.script import ejecutar_script
 def main():
     parser = argparse.ArgumentParser(description="Cliente del Sistema de Reserva de Boletos")
     parser.add_argument("--id", type=int, required=True, help="identificador del cliente (mayor que 0)")
-    modo = parser.add_mutually_exclusive_group(required=True)
-    modo.add_argument("--script", help="archivo con las operaciones a ejecutar")
-    modo.add_argument("--carga", action="store_true", help="generar carga continua")
+    parser.add_argument("--script", required=True, help="archivo con las operaciones a ejecutar")
     parser.add_argument("--detalle", action="store_true",
-                        help="(script) en las consultas, mostrar las fechas que tienen reservas")
-    parser.add_argument("--duracion", type=float, default=150, help="(carga) segundos, por defecto 150")
-    parser.add_argument("--por-minuto", type=float, default=20, help="(carga) peticiones por minuto")
-    parser.add_argument("--consultas", type=float, default=70,
-                        help="(carga) porcentaje de consultas; el resto son reservas y modificaciones")
-    parser.add_argument("--modificaciones", type=float, default=0,
-                        help="(carga) de las escrituras, porcentaje que modifica una reserva propia")
-    parser.add_argument("--cancelaciones", type=float, default=0,
-                        help="(carga) de las escrituras, porcentaje que cancela una reserva propia")
-    parser.add_argument("--salida", help="(carga) CSV de resultados; por defecto resultados/cliente_<id>.csv")
-    parser.add_argument("--semilla", type=int, help="(carga) semilla del azar, para repetir una corrida")
+                        help="en las consultas, mostrar las fechas que tienen reservas")
     args = parser.parse_args()
 
     if args.id <= 0:
         parser.error("--id debe ser un entero mayor que 0")
-    if args.carga and args.por_minuto <= 0:
-        parser.error("--por-minuto debe ser mayor que 0")
-    if args.carga and not (0 <= args.consultas <= 100 and args.modificaciones >= 0 and args.cancelaciones >= 0
-                           and args.modificaciones + args.cancelaciones <= 100):
-        parser.error("--consultas debe estar entre 0 y 100, y --modificaciones mas --cancelaciones no pasar de 100")
 
     try:
         cliente = Cliente(args.id)
     except RuntimeError as e:
         sys.exit(f"[C{args.id}] {e}")
     try:
-        if args.script:
-            resumen = ejecutar_script(cliente, args.script, args.detalle)
-            print(f"[C{args.id}] terminado: {resumen}")
-        else:
-            salida = args.salida or config.RAIZ / "resultados" / f"cliente_{args.id}.csv"
-            print(f"[C{args.id}] carga: {args.por_minuto:g}/min, {args.consultas:g}% consultas, "
-                  f"de las escrituras {args.modificaciones:g}% modifican y {args.cancelaciones:g}% cancelan, "
-                  f"{args.duracion:g} s -> {salida}", flush=True)
-            enviadas = generar_carga(cliente, salida, args.duracion, args.por_minuto,
-                                     args.consultas, args.modificaciones, args.cancelaciones,
-                                     semilla=args.semilla)
-            print(f"[C{args.id}] terminado: {enviadas} peticiones, "
-                  f"{len(cliente.notificaciones)} notificaciones recibidas", flush=True)
+        resumen = ejecutar_script(cliente, args.script, args.detalle)
+        print(f"[C{args.id}] terminado: {resumen}")
     except FileNotFoundError:
         print(f"No existe el archivo {args.script}")
     except RuntimeError as e:

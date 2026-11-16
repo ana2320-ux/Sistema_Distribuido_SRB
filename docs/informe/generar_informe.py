@@ -278,7 +278,7 @@ titulo2("2.1 Hardware")
 parrafo(T["hardware"])
 tabla("Máquinas del despliegue y capa que corre en cada una",
       ["Máquina", "Dirección IP", "Capa", "Procesos", "Procesador y memoria"],
-      [["1", "10.43.99.236", "Consumidores", "Clientes, casos de prueba y generador de carga",
+      [["1", "10.43.99.236", "Consumidores", "Clientes, casos de prueba y carga con Locust",
         "Intel Xeon Gold 6348 a 2,60 GHz (4 núcleos), 12 GB de RAM"],
        ["2 (NBIG333)", "10.43.100.36", "Servicios de negocio",
         "Gestor de Transacciones activo y de respaldo, réplicas del RMC y Servicio de Cancelaciones",
@@ -298,6 +298,8 @@ tabla("Software utilizado",
        ["SQLite", "3.50.4, en modo WAL", "Base de datos del Servicio de Persistencia"],
        ["`python-dotenv`", "1.2", "Lectura de la configuración (`.env`)"],
        ["`uv`", "–", "Instalación de dependencias y ejecución"],
+       ["Locust", "2.47.0", "Generación de la carga de los clientes"],
+       ["Kubernetes (k3s) y Docker", "–", "Despliegue de los servicios en contenedores, una capa por nodo"],
        ["`pytest`", "9.2.0", "Pruebas unitarias, de integración y de tolerancia a fallas"],
        ["`matplotlib`", "3.10.9", "Gráficos de las métricas"]],
       [3.6, 5.2, 7.6])

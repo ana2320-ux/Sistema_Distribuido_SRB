@@ -1,0 +1,35 @@
+# Capa de consumidores (nodo capa=consumidores). El pod queda dormido; se entra con
+# `kubectl -n srb exec -it deploy/clientes -- bash` para lanzar casos de prueba, carga y escenarios.
+# El cliente anuncia HOST_CAPA_CONSUMIDORES como dirección para recibir notificaciones
+# (puerto 6000 + id), por eso se toma la IP del propio pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clientes
+  namespace: srb
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: clientes}
+  template:
+    metadata:
+      labels: {app: clientes}
+    spec:
+      nodeSelector:
+        capa: consumidores
+      volumes:
+        - name: resultados
+          hostPath:
+            path: /opt/Clusterv2/Sistema_Distribuido_SRB/resultados
+            type: DirectoryOrCreate
+      containers:
+        - name: clientes
+          image: srb:2
+          imagePullPolicy: Never
+          command: ["sleep", "infinity"]
+          envFrom: [{configMapRef: {name: srb-config}}]
+          env:
+            - {name: HOST_CAPA_SERVICIOS, value: gt}
+            - name: HOST_CAPA_CONSUMIDORES
+              valueFrom: {fieldRef: {fieldPath: status.podIP}}
+          volumeMounts: [{name: resultados, mountPath: /app/resultados}]

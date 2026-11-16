@@ -1,0 +1,26 @@
+# Espacio de nombres y configuración común del SRB.
+# Las variables de entorno de los contenedores tienen prioridad sobre el .env de la imagen
+# (que trae 127.0.0.1), porque load_dotenv no sobreescribe las que ya existen.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: srb
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: srb-config
+  namespace: srb
+data:
+  GT_PUERTO_CLIENTES: "5555"
+  GT_PUERTO_RMC: "5556"
+  GT_PUERTO_CANCELACION: "5557"
+  SP_PUERTO: "5558"
+  SP_PUERTO_LECTURA: "5559"
+  PUERTO_BASE_NOTIFICACIONES: "6000"
+  TIMEOUT_MS: "5000"
+  # Disco local del nodo de almacenamiento (hostPath), no la carpeta NFS.
+  BD_RUTA: /var/tmp/srb/srb.db
+  # Nombre DNS del Service de persistencia: sirve para los puertos 5558 y 5559.
+  HOST_CAPA_PERSISTENCIA: persistencia
+  # HOST_CAPA_SERVICIOS y HOST_CAPA_CONSUMIDORES los fija cada Deployment (cambian según el proceso).
