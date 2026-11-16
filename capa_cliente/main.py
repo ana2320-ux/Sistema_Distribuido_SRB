@@ -5,9 +5,11 @@ Proceso cliente. Dos modos:
     python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt [--detalle]
 
   Carga continua:
-    python -m capa_cliente.main --id 1 --carga --duracion 150 --por-minuto 20 --consultas 70 --modificaciones 30
+    python -m capa_cliente.main --id 1 --carga --duracion 150 --por-minuto 20 --consultas 70 \
+                                --modificaciones 30 --cancelaciones 10
 """
 import argparse
+import sys
 
 from config import configuracion as config
 from capa_cliente.carga import generar_carga
@@ -29,6 +31,8 @@ def main():
                         help="(carga) porcentaje de consultas; el resto son reservas y modificaciones")
     parser.add_argument("--modificaciones", type=float, default=0,
                         help="(carga) de las escrituras, porcentaje que modifica una reserva propia")
+    parser.add_argument("--cancelaciones", type=float, default=0,
+                        help="(carga) de las escrituras, porcentaje que cancela una reserva propia")
     parser.add_argument("--salida", help="(carga) CSV de resultados; por defecto resultados/cliente_<id>.csv")
     parser.add_argument("--semilla", type=int, help="(carga) semilla del azar, para repetir una corrida")
     args = parser.parse_args()
@@ -37,10 +41,14 @@ def main():
         parser.error("--id debe ser un entero mayor que 0")
     if args.carga and args.por_minuto <= 0:
         parser.error("--por-minuto debe ser mayor que 0")
-    if args.carga and not (0 <= args.consultas <= 100 and 0 <= args.modificaciones <= 100):
-        parser.error("--consultas y --modificaciones deben estar entre 0 y 100")
+    if args.carga and not (0 <= args.consultas <= 100 and args.modificaciones >= 0 and args.cancelaciones >= 0
+                           and args.modificaciones + args.cancelaciones <= 100):
+        parser.error("--consultas debe estar entre 0 y 100, y --modificaciones mas --cancelaciones no pasar de 100")
 
-    cliente = Cliente(args.id)
+    try:
+        cliente = Cliente(args.id)
+    except RuntimeError as e:
+        sys.exit(f"[C{args.id}] {e}")
     try:
         if args.script:
             resumen = ejecutar_script(cliente, args.script, args.detalle)
@@ -48,11 +56,13 @@ def main():
         else:
             salida = args.salida or config.RAIZ / "resultados" / f"cliente_{args.id}.csv"
             print(f"[C{args.id}] carga: {args.por_minuto:g}/min, {args.consultas:g}% consultas, "
-                  f"{args.modificaciones:g}% de las escrituras son modificaciones, "
+                  f"de las escrituras {args.modificaciones:g}% modifican y {args.cancelaciones:g}% cancelan, "
                   f"{args.duracion:g} s -> {salida}", flush=True)
             enviadas = generar_carga(cliente, salida, args.duracion, args.por_minuto,
-                                     args.consultas, args.modificaciones, semilla=args.semilla)
-            print(f"[C{args.id}] terminado: {enviadas} peticiones", flush=True)
+                                     args.consultas, args.modificaciones, args.cancelaciones,
+                                     semilla=args.semilla)
+            print(f"[C{args.id}] terminado: {enviadas} peticiones, "
+                  f"{len(cliente.notificaciones)} notificaciones recibidas", flush=True)
     except FileNotFoundError:
         print(f"No existe el archivo {args.script}")
     except RuntimeError as e:

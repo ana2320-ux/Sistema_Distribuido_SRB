@@ -2,8 +2,13 @@
 Proceso del Servicio de Persistencia: socket REP con bind en SP_PUERTO.
 
 Uso (desde la raiz del proyecto):
-    python -m capa_persistencia.main
+    python -m capa_persistencia.main            # servicio principal: lecturas y escrituras
+    python -m capa_persistencia.main lectura    # replica de lectura, en SP_PUERTO_LECTURA
+
+La replica de lectura es un segundo proceso sobre la misma base de datos (SQLite en modo
+WAL): atiende consultas mientras el principal escribe, y asi le quita carga.
 """
+import sys
 
 import time
 
@@ -15,21 +20,26 @@ from capa_persistencia.db import BaseDatos
 from capa_persistencia.servicio_persistencia import ServicioPersistencia
 
 
+SOLO_LECTURA = sys.argv[1:] == ["lectura"]
+NOMBRE = "PERSISTENCIA-LECTURA" if SOLO_LECTURA else "PERSISTENCIA"
+PUERTO = config.SP_PUERTO_LECTURA if SOLO_LECTURA else config.SP_PUERTO
+
+
 def log(texto):
-    print(f"[{time.strftime('%H:%M:%S')}] [PERSISTENCIA] {texto}", flush=True)
+    print(f"[{time.strftime('%H:%M:%S')}] [{NOMBRE}] {texto}", flush=True)
 
 
 def main():
     bd = BaseDatos()
-    servicio = ServicioPersistencia(bd)
+    servicio = ServicioPersistencia(bd, solo_lectura=SOLO_LECTURA)
 
     print("Estado inicial de la base de datos:")
     bd.imprimir_estado(solo_ocupadas=True)
 
     contexto = zmq.Context()
     socket = contexto.socket(zmq.REP)
-    socket.bind(config.direccion_bind(config.SP_PUERTO))
-    log(f"escuchando en el puerto {config.SP_PUERTO}")
+    socket.bind(config.direccion_bind(PUERTO))
+    log(f"escuchando en el puerto {PUERTO}")
 
     try:
         while True:

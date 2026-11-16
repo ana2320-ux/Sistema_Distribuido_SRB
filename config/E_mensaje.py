@@ -1,6 +1,8 @@
 """
 
 Peticion:  {"uuid": str, "tipo": str, "id_cliente": int, "datos": dict}
+           Una peticion reenviada tras no recibir respuesta lleva ademas "reintento": true
+           y el MISMO uuid: asi el sistema no repite una operacion que ya se hizo.
 Respuesta: {"uuid": str, "estado": str, "motivo": str | None, "datos": dict}
 
 una respuesta lleva el mismo uuid de la peticion que responde.
@@ -32,7 +34,8 @@ RESERVA = "RESERVA"
 # datos: {"id_reserva": 3, "n_asientos": 5}   cambia el numero de asientos
 #     o: {"id_reserva": 3, "fecha": "2026/11/15"}   cambia la fecha (otra ocurrencia del mismo evento)
 MODIFICACION = "MODIFICACION"
-# segunda entrega
+# datos: {"id_reserva": 3, "notificar_a": "tcp://10.43.99.236:6001"}
+# El GT responde ACK de inmediato; el resultado llega despues como NOTIFICACION a esa direccion.
 CANCELACION = "CANCELACION"
 
 
@@ -46,18 +49,21 @@ AGREGAR_RESERVA = "AGREGAR_RESERVA"
 CONSULTAR_RESERVA = "CONSULTAR_RESERVA"
 # datos: igual que MODIFICACION
 MODIFICAR_RESERVA = "MODIFICAR_RESERVA"
+# datos: {"id_reserva": 3}  -> libera los asientos (lo envia el Servicio de Cancelaciones)
+LIBERAR_RESERVA = "LIBERAR_RESERVA"
 
 
-# Del servicio de cancelaciones al cliente
-NOTIFICACION = "NOTIFICACION"                  # segunda entrega
+# Del Servicio de Cancelaciones al cliente: una respuesta (mismo uuid de la CANCELACION)
+# con el campo adicional "tipo": "NOTIFICACION"
+NOTIFICACION = "NOTIFICACION"
 
 TIPOS = {CONSULTA, RESERVA, MODIFICACION, CANCELACION, CONSULTA_DISPONIBILIDAD, AGREGAR_RESERVA,
-         CONSULTAR_RESERVA, MODIFICAR_RESERVA, NOTIFICACION}
+         CONSULTAR_RESERVA, MODIFICAR_RESERVA, LIBERAR_RESERVA, NOTIFICACION}
 
 EXITO = "EXITO" # se hizo lo pedido
 FALLO = "FALLO" # no se pudo por una regla de negocio (sin cupo, no existe...)
 ERROR = "ERROR" # la peticion estaba mal formada o un servicio no respondio
-ACK = "ACK" # recibido, se procesara despues (cancelacion, 2.a entrega)
+ACK = "ACK" # recibido, se procesara despues (cancelacion)
 
 ESTADOS = {EXITO, FALLO, ERROR, ACK}
 

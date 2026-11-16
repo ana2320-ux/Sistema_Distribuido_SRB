@@ -1,6 +1,7 @@
 # Caso de prueba basico. Se ejecuta con la BD recien cargada (50 eventos de noviembre de 2026):
 #   python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle
 # Las reservas quedan numeradas en el orden en que se aceptan: 1, 2, 3 y 4.
+# Requiere tambien el Servicio de Cancelaciones (python -m capa_negocios.main cancelaciones).
 
 CONSULTA noviembre
 
@@ -36,11 +37,19 @@ MODIFICACION 99 2
 # rechazada: asientos invalidos
 MODIFICACION 2 0
 
-ESPERAR 0.5
+# --- Cancelaciones (asincronas: el GT responde ACK y el resultado llega como notificacion)
+# la reserva 2 se cancela: libera 2 asientos de E1 el 01 (queda con 5 ocupados)
+CANCELACION 2
+# notificacion de rechazo: la reserva 2 ya estaba cancelada
+CANCELACION 2
+# notificacion de rechazo: la reserva 99 no existe
+CANCELACION 99
+
+ESPERAR 1
 CONSULTA noviembre
 
 # Estado final esperado de la BD:
-#   E1  2026/11/01  ocupados 7    (reserva 1 x5 + reserva 2 x2)
+#   E1  2026/11/01  ocupados 5    (reserva 1 x5; la reserva 2 se cancelo)
 #   E1  2026/11/15  ocupados 100  (reserva 3 x100)
 #   E30 2026/11/02  ocupados 4    (reserva 4 x4)
-#   total: 111 asientos ocupados, 4 reservas activas
+#   total: 109 asientos ocupados, 3 reservas activas

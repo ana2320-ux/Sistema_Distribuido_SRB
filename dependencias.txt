@@ -1,2 +1,5 @@
 pyzmq
 python-dotenv
+# solo para las pruebas y para analizar las metricas
+pytest
+matplotlib

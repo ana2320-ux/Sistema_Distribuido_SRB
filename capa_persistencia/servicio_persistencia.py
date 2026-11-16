@@ -8,8 +8,9 @@ Peticiones que atiende:
   AGREGAR_RESERVA          {"id_evento": "E1", "fecha": "2026/11/01", "n_asientos": 2}
   CONSULTAR_RESERVA        {"id_reserva": 3}
   MODIFICAR_RESERVA        {"id_reserva": 3, "n_asientos": 5}  o  {"id_reserva": 3, "fecha": "2026/11/15"}
+  LIBERAR_RESERVA          {"id_reserva": 3}
 
-Las escrituras (AGREGAR_RESERVA, MODIFICAR_RESERVA) son idempotentes por el uuid de la
+Las escrituras (AGREGAR_RESERVA, MODIFICAR_RESERVA, LIBERAR_RESERVA) son idempotentes por el uuid de la
 peticion: si ya se aplicaron, se devuelve el resultado guardado sin repetirlas.
 """
 import sqlite3
@@ -24,7 +25,8 @@ class DatoInvalido(Exception):
 
 
 class ServicioPersistencia:
-    def __init__(self, db):
+    def __init__(self, db, solo_lectura=False):
+        """solo_lectura=True: la replica de lectura, que no atiende escrituras."""
         self.db = db
         # tipo de peticion -> metodo que la atiende
         self.operaciones = {
@@ -33,8 +35,12 @@ class ServicioPersistencia:
             mensaje.AGREGAR_RESERVA: self.agregar_reserva,
             mensaje.CONSULTAR_RESERVA: self.consultar_reserva,
             mensaje.MODIFICAR_RESERVA: self.modificar_reserva,
+            mensaje.LIBERAR_RESERVA: self.liberar_reserva,
         }
-        self.escrituras = {mensaje.AGREGAR_RESERVA, mensaje.MODIFICAR_RESERVA}
+        self.escrituras = {mensaje.AGREGAR_RESERVA, mensaje.MODIFICAR_RESERVA, mensaje.LIBERAR_RESERVA}
+        if solo_lectura:
+            for tipo in self.escrituras:
+                del self.operaciones[tipo]
 
     def atender(self, peticion):
         """Recibe una peticion y SIEMPRE devuelve una respuesta."""
@@ -91,6 +97,10 @@ class ServicioPersistencia:
         else:
             n_asientos = leer_asientos(peticion)
             reserva = self.db.modificar_reserva(id_reserva, n_asientos=n_asientos, uuid=peticion.get("uuid"))
+        return mensaje.crear_respuesta(peticion, mensaje.EXITO, datos=reserva)
+
+    def liberar_reserva(self, peticion):
+        reserva = self.db.liberar_reserva(leer_id_reserva(peticion), peticion.get("uuid"))
         return mensaje.crear_respuesta(peticion, mensaje.EXITO, datos=reserva)
 
 

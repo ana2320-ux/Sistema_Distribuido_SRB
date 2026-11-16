@@ -55,6 +55,7 @@ class BaseDatos:
         self.ruta = ruta
         self.conexion = sqlite3.connect(ruta, timeout=10) #SQLite solo deja que se escriba 1 al mismo tiempo, asi que si alguien esta escribiendo, este espera 10s
         self.conexion.row_factory = sqlite3.Row # filas accesibles por nombre de columna
+        self.conexion.execute("PRAGMA journal_mode = WAL") # la replica de lectura lee mientras el principal escribe
         self.conexion.execute("PRAGMA foreign_keys = ON") #por defecto ignora las llaves foráneas, asi que se activa
         self.conexion.executescript(ESQUEMA) # crea las tablas si no existen
 
@@ -201,6 +202,19 @@ class BaseDatos:
             del datos["ocurrencia_id"]
             self._registrar_operacion(uuid, "MODIFICAR_RESERVA", datos)
             return datos
+
+    def liberar_reserva(self, id_reserva, uuid=None):
+        """
+        Cancela una reserva: devuelve sus asientos a la ocurrencia y la marca como inactiva,
+        todo en una transaccion. Lanza NoExiste si no existe o ya estaba cancelada.
+        """
+        with self.conexion:
+            reserva = self.consultar_reserva(id_reserva)
+            self._ocupar(reserva["ocurrencia_id"], -reserva["n_asientos"], reserva["id_evento"], reserva["fecha"])
+            self.conexion.execute("UPDATE reserva SET activa = 0 WHERE id = ?", (id_reserva,))
+            del reserva["ocurrencia_id"]
+            self._registrar_operacion(uuid, "LIBERAR_RESERVA", reserva)
+            return reserva
 
 
     def verificar(self):

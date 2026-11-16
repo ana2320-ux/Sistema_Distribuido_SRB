@@ -47,7 +47,11 @@ GT_PUERTO_CANCELACION = valor("GT_PUERTO_CANCELACION")
 
 # --- Persistencia
 SP_PUERTO = valor("SP_PUERTO")
+SP_PUERTO_LECTURA = valor("SP_PUERTO_LECTURA")
 BD_RUTA = RAIZ / texto("BD_RUTA")
+
+# --- Clientes
+PUERTO_BASE_NOTIFICACIONES = valor("PUERTO_BASE_NOTIFICACIONES")
 
 # --- Tiempos
 TIMEOUT_MS = valor("TIMEOUT_MS")
@@ -62,6 +66,8 @@ if __name__ == "__main__":
     print("  GT clientes  :", direccion(HOST_CAPA_SERVICIOS, GT_PUERTO_CLIENTES))
     print("  GT para RMC  :", direccion(HOST_CAPA_SERVICIOS, GT_PUERTO_RMC))
     print("  Persistencia :", direccion(HOST_CAPA_PERSISTENCIA, SP_PUERTO))
-    print("  Bind persist.:", direccion_bind(SP_PUERTO))
+    print("  Replica lect.:", direccion(HOST_CAPA_PERSISTENCIA, SP_PUERTO_LECTURA))
+    print("  Cancelaciones:", direccion(HOST_CAPA_SERVICIOS, GT_PUERTO_CANCELACION))
+    print("  Notificacion :", f"puerto {PUERTO_BASE_NOTIFICACIONES} + id del cliente")
     print("  Base de datos:", BD_RUTA)
     print("  Timeout      :", TIMEOUT_MS, "ms")
