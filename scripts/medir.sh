@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Corridas de rendimiento de la Tabla 1 para UNA arquitectura. Se ejecuta en la maquina 1
-# (clientes), con el sistema ya levantado en las maquinas 2 y 3 en la arquitectura que se
-# va a medir. Lanza los tres escenarios (3, 5 y 8 clientes), tres corridas de cada uno.
-# Antes de cada escenario se detiene para que la base de datos se reinicie en la maquina 3.
+# Corridas de rendimiento de la Tabla 1. Se ejecuta en la maquina 1 (clientes), con el
+# sistema ya levantado en las maquinas 2 y 3. Lanza los tres escenarios (3, 5 y 8 clientes),
+# tres corridas de cada uno. Antes de cada escenario se detiene para que la base de datos
+# se reinicie en la maquina 3.
 #
-# Uso, desde la carpeta del proyecto:
-#   bash scripts/medir.sh base          # con la arquitectura base levantada
-#   bash scripts/medir.sh escalable     # con la arquitectura escalable levantada
+# Uso, desde la carpeta del proyecto:   bash scripts/medir.sh
+# El primer argumento, opcional, es la etiqueta de las corridas (por defecto: escalable).
 # Opcionales: DURACION=150 (segundos por corrida), POR_MINUTO=20, CORRIDAS=3, PYTHON="uv run python"
 
 set -u
 cd "$(dirname "$0")/.."
-ETIQUETA="${1:?uso: bash scripts/medir.sh <base|escalable>}"
+ETIQUETA="${1:-escalable}"
 PYTHON="${PYTHON:-python3}"
 DURACION="${DURACION:-150}"
 POR_MINUTO="${POR_MINUTO:-20}"
