@@ -279,13 +279,13 @@ parrafo(T["hardware"])
 tabla("Máquinas del despliegue y capa que corre en cada una",
       ["Máquina", "Dirección IP", "Capa", "Procesos", "Procesador y memoria"],
       [["1", "10.43.99.236", "Consumidores", "Clientes, casos de prueba y generador de carga",
-        "Intel Xeon Gold 6348 a 2,60 GHz, 12 GB de RAM"],
+        "Intel Xeon Gold 6348 a 2,60 GHz (4 núcleos), 12 GB de RAM"],
        ["2 (NBIG333)", "10.43.100.36", "Servicios de negocio",
         "Gestor de Transacciones activo y de respaldo, réplicas del RMC y Servicio de Cancelaciones",
-        "Intel Xeon Gold 6348 a 2,60 GHz, 12 GB de RAM"],
+        "Intel Xeon Gold 6348 a 2,60 GHz (4 núcleos), 12 GB de RAM"],
        ["3 (NBIG305)", "10.43.99.246", "Almacenamiento",
         "Servicio de Persistencia principal, réplica de lectura y base de datos SQLite",
-        "Intel Xeon Gold 6348 a 2,60 GHz, 12 GB de RAM"]],
+        "Intel Xeon Gold 6348 a 2,60 GHz (4 núcleos), 12 GB de RAM"]],
       [2.2, 2.5, 3.0, 5.0, 3.7])
 parrafo(T["equipo_medicion"])
 

@@ -16,7 +16,8 @@ TEXTOS = {
     ],
     "hardware":
         "El sistema se despliega en tres máquinas con Ubuntu, una por capa (Tabla 1). Las tres tienen el mismo "
-        "procesador y la misma memoria.",
+        "procesador (4 núcleos asignados a cada máquina) y la misma memoria. La carpeta del proyecto está "
+        "compartida por NFS entre las tres; la base de datos queda en el disco local de la máquina 3.",
     "equipo_medicion":
         "Las mediciones de este informe se han tomado en un solo computador: procesador Intel Core i7-13700HX "
         "(16 núcleos, 24 hilos), 31,8 GB de RAM y Windows 11 Home. Las tres capas corren en él como procesos "
@@ -326,7 +327,6 @@ TEXTOS = {
         "Máquinas 3 y 2: se levanta la arquitectura escalable. Máquina 1: `bash scripts/medir.sh escalable`.",
         "Se copia `resultados/gt_metricas.csv` de la máquina 2 a la máquina 1 y se ejecuta "
         "`python -m herramientas.analizar_metricas`.",
-        "En una de las máquinas, `nproc` y `free -h` dan el número de núcleos y la memoria para completar la Tabla 1.",
     ],
     "referencias": [
         "Coulouris, G., Dollimore, J., Kindberg, T., & Blair, G. (2012). *Distributed systems: Concepts and design* "
