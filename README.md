@@ -82,6 +82,10 @@ HOST_CAPA_SERVICIOS=10.43.100.36
 HOST_CAPA_PERSISTENCIA=10.43.99.246
 ```
 
+La carpeta del proyecto está compartida por NFS entre las tres máquinas, así que el `.env` se edita una
+sola vez. La base de datos no puede quedar en esa carpeta (SQLite no funciona bien en un disco de red):
+`BD_RUTA=/var/tmp/srb/srb.db` la deja en el disco local de la máquina 3.
+
 La configuración leída se comprueba con `python -m config.configuracion`.
 
 Reglas del firewall (`ufw`) para que cada puerto solo acepte conexiones de la máquina que lo usa:
@@ -210,7 +214,7 @@ PYTHON="uv run python" bash scripts/protocolo-pruebas.sh       # con uv
 
 Ejecuta las pruebas de `pytest` de la carpeta `pruebas/` y muestra un resumen PASA / FALLA por
 tipo. Las pruebas arrancan sus propios procesos en el mismo computador (`127.0.0.1`), en otros
-puertos (15555 a 15559) y con una base de datos aparte (`datos/pruebas.db`): no interfieren con
+puertos (15555 a 15559) y con una base de datos aparte en la carpeta temporal: no interfieren con
 un sistema en marcha. Tarda cerca de un minuto.
 
 | Tipo | Archivo | Qué comprueba |
@@ -293,7 +297,7 @@ Respuesta: {"uuid": "...", "estado": "EXITO", "motivo": null, "datos": {...}}
 | `ERROR NO_DISPONIBLE: la persistencia no respondio` | El Servicio de Persistencia no está en marcha o el puerto 5558 está cerrado | Se revisan la máquina 3 y la regla de `ufw` |
 | La cancelación responde `ACK` pero no llega la notificación | El Servicio de Cancelaciones no está en marcha, o los puertos 6001 en adelante de la máquina 1 están cerrados | Se arranca el servicio y se revisa la regla de `ufw` de la máquina 1 |
 | `el puerto 6001 esta ocupado` | Ya hay un cliente con ese `--id` | Se usa otro `--id` |
-| `database is locked` o errores de SQLite | La carpeta del proyecto está en un disco de red (NFS), que no admite el modo WAL | `BD_RUTA` se cambia por una ruta absoluta en el disco local de la máquina 3, por ejemplo `/var/tmp/srb/srb.db` |
+| `database is locked` o errores de SQLite | `BD_RUTA` apunta a un disco de red (NFS), que no admite el modo WAL de SQLite | `BD_RUTA` debe ser una ruta del disco local de la máquina 3, como la que trae el `.env` (`/var/tmp/srb/srb.db`) |
 
 ## 12. Estructura del proyecto
 
@@ -306,6 +310,5 @@ herramientas/        ver_bd (estado de la base de datos) y analizar_metricas
 pruebas/             Pruebas de pytest y casos de prueba (caso_basico.txt, ejemplo.json)
 scripts/             protocolo-pruebas.sh y medir.sh
 docs/                Informe y diagramas de la arquitectura final
-datos/               Base de datos SQLite (se crea al cargar los datos)
 resultados/          CSV de métricas y gráficos (se crea al correr)
 ```

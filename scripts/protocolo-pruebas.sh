@@ -6,7 +6,7 @@
 #   3. Concurrencia y consistencia  4. Seguridad basica
 #   5. Tolerancia a fallas
 # Las pruebas arrancan sus propios procesos en este computador (127.0.0.1), en otros
-# puertos y con una base de datos aparte (datos/pruebas.db): no tocan un sistema en marcha.
+# puertos y con una base de datos aparte en la carpeta temporal: no tocan un sistema en marcha.
 # Las pruebas de rendimiento, escalabilidad y despliegue se hacen en las tres maquinas
 # (seccion "Medicion del rendimiento" del README).
 #

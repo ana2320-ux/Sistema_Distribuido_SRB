@@ -2,7 +2,7 @@
 Configuracion de las pruebas automaticas (pytest).
 
 Todas corren en un solo computador: las tres capas en 127.0.0.1, en puertos distintos
-a los reales y con una base de datos aparte (datos/pruebas.db), para no tocar un
+a los reales y con una base de datos aparte en la carpeta temporal, para no tocar un
 sistema que este en marcha. Las variables se fijan antes de importar la configuracion.
 
 Uso (desde la raiz del proyecto):   python -m pytest
@@ -10,13 +10,15 @@ Uso (desde la raiz del proyecto):   python -m pytest
 import os
 import subprocess
 import sys
+import tempfile
 import time
 
 os.environ.update(
     HOST_CAPA_CONSUMIDORES="127.0.0.1", HOST_CAPA_SERVICIOS="127.0.0.1", HOST_CAPA_PERSISTENCIA="127.0.0.1",
     GT_PUERTO_CLIENTES="15555", GT_PUERTO_RMC="15556", GT_PUERTO_CANCELACION="15557",
     SP_PUERTO="15558", SP_PUERTO_LECTURA="15559", PUERTO_BASE_NOTIFICACIONES="16000",
-    BD_RUTA="datos/pruebas.db", TIMEOUT_MS="2000", PYTHONUNBUFFERED="1",
+    BD_RUTA=os.path.join(tempfile.gettempdir(), "srb_pruebas", "pruebas.db"),     # disco local, no NFS
+    TIMEOUT_MS="2000", PYTHONUNBUFFERED="1",
 )
 
 import pytest
