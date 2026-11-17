@@ -322,22 +322,28 @@ tabla("Componentes de la arquitectura final y su justificación",
       T["tabla_componentes"], [4.0, 2.6, 9.8])
 for texto in T["kubernetes"]:
     parrafo(texto)
-titulo2("3.3 Clases y modelo de datos")
+titulo2("3.3 Patrones de resiliencia")
+for texto in T["patrones"]:
+    parrafo(texto)
+tabla("Patrones de sistemas distribuidos resilientes usados en el SRB",
+      ["Patrón", "Cómo se aplica", "Qué resuelve"], T["tabla_patrones"], [4.6, 7.4, 4.4],
+      tamano=9, texto_nota=T["nota_patrones"])
+titulo2("3.4 Clases y modelo de datos")
 parrafo(T["clases"])
 figura("Diagrama de clases del sistema", DIAGRAMAS / "03-clases.png", 16.5)
 figura("Modelo de datos de la base SQLite", DIAGRAMAS / "04-entidad-relacion.png", 15.0)
-titulo2("3.4 Secuencia de las operaciones")
+titulo2("3.5 Secuencia de las operaciones")
 parrafo(T["secuencia"])
 figura("Diagrama de secuencia de las operaciones síncronas", DIAGRAMAS / "05-secuencia-sincrona.png", 15.0)
 figura("Diagrama de secuencia de la cancelación asíncrona con notificación",
        DIAGRAMAS / "06-secuencia-cancelacion.png", 15.5)
 figura("Diagrama de secuencia de la recuperación ante la caída de un RMC y del Gestor de Transacciones",
        DIAGRAMAS / "07-secuencia-fallas.png", 15.5)
-titulo2("3.5 Mensajes")
+titulo2("3.6 Mensajes")
 parrafo(T["mensajes"])
 tabla("Mensajes del sistema", ["Tipo", "Quién lo envía", "Datos", "Respuesta"], T["tabla_mensajes"],
       [3.6, 3.0, 5.6, 4.2], tamano=9)
-titulo2("3.6 Modelos de fallos y de seguridad en la implementación")
+titulo2("3.7 Modelos de fallos y de seguridad en la implementación")
 for texto in T["fallos_seguridad"]:
     parrafo(texto)
 

@@ -88,22 +88,26 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                         'El gestor se conecta al Servicio de Cancelaciones con un socket PUSH; si ese servicio está '
                         'caído, ZeroMQ guarda las cancelaciones aceptadas y las entrega cuando vuelve.']],
  'kubernetes': ['La escalabilidad y la tolerancia a fallas se obtienen como se planteó en la primera entrega, con '
-                'Kubernetes: cada servicio se empaqueta en una imagen de contenedor y se despliega como Deployment; '
-                'las tres máquinas son nodos de un clúster k3s y un `nodeSelector` asigna una capa a cada nodo; las '
-                'réplicas del RMC reciben el trabajo por el intermediario ROUTER/DEALER del gestor; los servicios se '
-                'encuentran por el nombre DNS de su Service; y el cliente reintenta con un identificador único, de '
-                'modo que una operación interrumpida continúa sin duplicarse. La persistencia lleva una sola réplica '
-                'con almacenamiento en el disco del nodo, porque SQLite admite un solo escritor; su réplica de '
-                'lectura es un segundo contenedor del mismo pod, sobre el mismo volumen.',
-                'El código de la aplicación es el mismo con Kubernetes y sin él: los manifiestos solo cambian las '
-                'variables de entorno de cada contenedor. Por eso el despliegue con procesos (un comando por '
-                'servicio) se conserva: es la arquitectura base de las mediciones y una alternativa cuando no hay '
-                'clúster. La imagen se ha construido y el sistema se ha ejecutado en contenedores con los mismos '
-                'nombres de servicio, variables y agrupación de los manifiestos (Figura 2): el caso '
-                '`pruebas/caso_basico.txt` dio el resultado esperado y, con una carga de Locust en marcha, el gestor '
-                'activo se detuvo tres veces sin que el cliente recibiera errores; en cada una el contenedor de '
-                'respaldo tomó el control y el contenedor reiniciado quedó como respaldo. Falta aplicar los '
-                'manifiestos en el clúster de las tres máquinas (sección 8).'],
+                'Kubernetes: cada servicio corre en un contenedor desplegado como Deployment; las tres máquinas son '
+                'nodos de un clúster k3s y un `nodeSelector` asigna una capa a cada nodo; las réplicas del RMC '
+                'reciben el trabajo por el intermediario ROUTER/DEALER del gestor; los servicios se encuentran por '
+                'el nombre DNS de su Service; las pruebas de vida y de disponibilidad detectan un contenedor que '
+                'dejó de atender; y el cliente reintenta con un identificador único, de modo que una operación '
+                'interrumpida continúa sin duplicarse. La persistencia lleva una sola réplica con almacenamiento en '
+                'el disco del nodo, porque SQLite admite un solo escritor; su réplica de lectura es un segundo '
+                'contenedor del mismo pod, sobre el mismo volumen.',
+                'Los contenedores usan la imagen oficial `python:3.12-slim` con la carpeta del proyecto, compartida '
+                'por NFS, montada en `/app`; así no hace falta construir ni distribuir una imagen propia, y el '
+                'despliegue completo son tres comandos de `scripts/k8s.sh` (instalar el servidor, unir los agentes y '
+                'desplegar). El código es el mismo con Kubernetes y sin él: los manifiestos solo cambian las '
+                'variables de entorno de cada contenedor, y el despliegue con procesos se conserva como arquitectura '
+                'base de las mediciones.',
+                'El despliegue se ha probado en un clúster k3s de tres nodos levantado con contenedores de Docker en '
+                'un solo computador, con el paso `desplegar` del script: los siete pods quedaron cada uno en el nodo '
+                'de su capa, el caso `pruebas/caso_basico.txt` dio el resultado esperado y, con una carga de Locust '
+                'en marcha, se detuvo el gestor activo y se borró un pod del RMC sin que el cliente recibiera '
+                'errores; el respaldo tomó el control, Kubernetes creó un RMC nuevo y la base de datos quedó '
+                'consistente. Falta repetirlo en las tres máquinas (sección 8).'],
  'clases': 'El código está organizado en un paquete por capa (Figura 4). La lógica de cada servicio está separada de '
            'los sockets: `ServicioRMC` y `ServicioPersistencia` reciben una petición y devuelven una respuesta, y '
            'los módulos `main` manejan la comunicación. `BaseDatos` concentra todo el SQL. La base de datos tiene '
@@ -115,7 +119,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
               'resultado llega después como notificación, directamente del Servicio de Cancelaciones al cliente. La '
               'Figura 8 muestra la recuperación cuando cae un RMC o el gestor activo.',
  'mensajes': 'Toda petición lleva un `uuid`, el tipo, el identificador del cliente y los datos; la respuesta lleva '
-             'el mismo `uuid`, un estado (`EXITO`, `FALLO`, `ERROR` o `ACK`) y, si aplica, un motivo. La Tabla 4 '
+             'el mismo `uuid`, un estado (`EXITO`, `FALLO`, `ERROR` o `ACK`) y, si aplica, un motivo. La Tabla 5 '
              'completa la lista de mensajes de la primera entrega con la modificación, la cancelación y la '
              'notificación.',
  'tabla_mensajes': [['`CONSULTA`',
@@ -183,7 +187,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                'usuario virtual es un proceso cliente: mantiene un ritmo fijo de al menos 20 peticiones por minuto, '
                'elige la operación, el evento y los asientos al azar con semilla fija, y recibe por parámetros el '
                'número de peticiones por minuto, el porcentaje de cada operación, la duración y la semilla.',
-               'La Tabla 5 muestra el resultado de cada caso. Las 75 pruebas automáticas pasan.'],
+               'La Tabla 6 muestra el resultado de cada caso. Las 75 pruebas automáticas pasan.'],
  'tabla_protocolo': [['Unitaria',
                       'Validar mensajes JSON (campos obligatorios, tipos, cantidad mayor que 0)',
                       'Los inválidos se rechazan con error y los válidos pasan',
@@ -287,7 +291,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                      ['Rendimiento',
                       'Escenario 1: 3 clientes (2 solo consultan, 1 consulta y reserva)',
                       'Promedio, desviación estándar y TPM; meta de 60 TPM con 0 % de error',
-                      '61,2 TPM en total y 0 % de error (Tablas 7 y 8)',
+                      '61,2 TPM en total y 0 % de error (Tablas 8 y 9)',
                       'Medido (1)'],
                      ['Rendimiento',
                       'Escenario 2: 5 clientes (3 solo consultan, 2 reservan y modifican)',
@@ -297,18 +301,18 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                      ['Rendimiento',
                       'Escenario 3: 8 clientes (4 solo consultan, 4 reservan y modifican)',
                       'Identificar el punto de saturación',
-                      '163 TPM, 0 % de error; la saturación se midió aparte (Tabla 9)',
+                      '163 TPM, 0 % de error; la saturación se midió aparte (Tabla 10)',
                       'Medido (1)'],
                      ['Escalabilidad',
                       'Repetir los tres escenarios en la arquitectura base y en la escalable',
                       'Comparación de las métricas con porcentaje de mejora',
-                      'Tablas 7, 8 y 9',
+                      'Tablas 8, 9 y 10',
                       'Medido (1)'],
                      ['Despliegue',
                       'Arrancar el sistema con las IP reales, una capa por máquina',
                       'Funciona en las tres máquinas siguiendo el README',
-                      'La configuración, el README y los manifiestos de Kubernetes (`k8s/`) están preparados para '
-                      'las tres máquinas; falta ejecutarlos en ellas',
+                      'Clúster k3s de tres nodos en contenedores: los siete pods en el nodo de su capa y el caso '
+                      'básico correcto. Falta en las tres máquinas',
                       'Pendiente'],
                      ['Seguridad básica',
                       'Mensajes mal formados, identificadores inexistentes y cantidades excesivas',
@@ -321,7 +325,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
  'fallas': ['Además de las pruebas automáticas, se ha medido la recuperación con los tiempos de espera reales. Con '
             'la arquitectura escalable en marcha, tres clientes envían 120 peticiones por minuto cada uno durante 40 '
             'segundos (40 % consultas; el resto reservas, modificaciones y cancelaciones) y a los 15 segundos se '
-            'mata un proceso. La Tabla 6 muestra el resultado.',
+            'mata un proceso. La Tabla 7 muestra el resultado.',
             'En los cuatro casos ningún cliente recibió un error, todas las cancelaciones aceptadas se notificaron y '
             'la base de datos quedó consistente: los asientos ocupados coinciden con las reservas activas. Al caer '
             'el Gestor de Transacciones, la petición más lenta tardó cerca de 1 segundo, que es lo que demora el '
@@ -350,7 +354,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                 'los tres escenarios no muestran dónde se satura. Para encontrarlo se ha hecho una prueba adicional: '
                 'los 8 clientes del escenario 3 envían una petición apenas reciben la respuesta de la anterior, sin '
                 'pausa, durante 60 segundos. Para que las reservas no se rechazaran por falta de cupo, en esta '
-                'prueba cada ocurrencia se cargó con 10 000 000 de asientos (Tabla 9).'],
+                'prueba cada ocurrencia se cargó con 10 000 000 de asientos (Tabla 10).'],
  'nota_saturacion': 'Una corrida por arquitectura. En esta prueba las TPM son la capacidad máxima del sistema con 8 '
                     'clientes.',
  'analisis': ['Con la carga del enunciado las dos arquitecturas atienden todo lo que reciben. Las transacciones por '
@@ -401,8 +405,9 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                    'máquinas del despliegue se siguen estos pasos, detallados en la sección 9 del README; el informe '
                    'se regenera con `python docs/informe/generar_informe.py` después de copiar los resultados a '
                    '`docs/informe/datos/`.'],
- 'pasos_tres_maquinas': ['Clúster: se instala k3s, se etiquetan los nodos, se importa la imagen y se aplica `kubectl '
-                         'apply -f k8s/` (sección 5.4 del README); el caso `pruebas/caso_basico.txt` desde el pod de '
+ 'pasos_tres_maquinas': ['Clúster: con las IP reales en el `.env`, `bash scripts/k8s.sh servidor` en la máquina 2, '
+                         '`bash scripts/k8s.sh agente` en las máquinas 1 y 3, y `bash scripts/k8s.sh desplegar` en '
+                         'la máquina 2 (sección 5.4 del README); el caso `pruebas/caso_basico.txt` desde el pod de '
                          'clientes comprueba el despliegue.',
                          'Máquinas 3 y 2: se levanta la arquitectura base. Máquina 1: `bash scripts/medir.sh base`.',
                          'Máquinas 3 y 2: se levanta la arquitectura escalable. Máquina 1: `bash scripts/medir.sh '
@@ -415,4 +420,48 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                  'https://zguide.zeromq.org/docs/chapter4/',
                  'Locust. (s. f.). *Testing other systems/protocols*. '
                  'https://docs.locust.io/en/stable/testing-other-systems.html',
-                 'SQLite. (s. f.). *Write-ahead logging*. https://www.sqlite.org/wal.html']}
+                 'SQLite. (s. f.). *Write-ahead logging*. https://www.sqlite.org/wal.html'],
+ 'patrones': ['La resiliencia del sistema se apoya en patrones conocidos de los sistemas distribuidos. La Tabla 4 '
+              'resume cuáles se han usado y dónde; varios son los patrones de petición y respuesta confiable de la '
+              'guía de ZeroMQ (Hintjens, 2013).'],
+ 'tabla_patrones': [['Tiempo de espera (timeout)',
+                     'Cada salto espera un tiempo máximo, más corto cuanto más adentro: 5 s el cliente, 2 s el '
+                     'gestor y 1,6 s el RMC',
+                     'Una falla se detecta en vez de bloquear a quien espera'],
+                    ['Reintento con cliente perezoso (Lazy Pirate)',
+                     'El cliente, sin respuesta, cierra el socket REQ, abre uno nuevo y reenvía la petición una vez',
+                     'Supera la caída del gestor y los mensajes perdidos'],
+                    ['Receptor idempotente',
+                     'La persistencia guarda cada escritura por el `uuid` de la petición y devuelve el mismo '
+                     'resultado si llega repetida',
+                     'Los reintentos no duplican reservas ni liberaciones'],
+                    ['Intermediario con reparto de carga (ROUTER/DEALER)',
+                     'El gestor reparte las peticiones entre los RMC conectados y reenvía a otro las que no tuvieron '
+                     'respuesta',
+                     'Escala el RMC y tolera su caída'],
+                    ['Redundancia activa-pasiva (respaldo en espera)',
+                     'Un segundo gestor espera y toma los puertos cuando el activo cae',
+                     'Sustituye al gestor sin intervención'],
+                    ['Réplica de lectura (separación de lecturas y escrituras)',
+                     'Las consultas van a una réplica y las escrituras al servicio principal, que es el único '
+                     'escritor',
+                     'Descarga al escritor y conserva la consistencia'],
+                    ['Degradación controlada',
+                     'Si la réplica de lectura no responde, las consultas pasan al servicio principal',
+                     'El servicio sigue con menos capacidad'],
+                    ['Almacenar y reenviar (cola PUSH/PULL)',
+                     'El gestor acepta la cancelación y ZeroMQ la guarda hasta que el Servicio de Cancelaciones la '
+                     'recibe',
+                     'Ninguna cancelación aceptada se pierde'],
+                    ['Fallar rápido',
+                     'El gestor rechaza de inmediato los mensajes mal formados y la base tiene restricciones `CHECK`',
+                     'Los errores no se propagan ni dejan datos inválidos'],
+                    ['Transacción atómica',
+                     'Verificar el cupo y ocupar los asientos es una sola instrucción dentro de una transacción',
+                     'No hay sobreventa aunque varios clientes reserven a la vez'],
+                    ['Pruebas de salud y autorreparación',
+                     'Kubernetes sondea los puertos (liveness y readiness) y recrea los contenedores o pods caídos',
+                     'Reemplaza procesos sin intervención']],
+ 'nota_patrones': 'No se han usado disyuntores (circuit breaker) ni latidos periódicos entre servicios (Paranoid '
+                  'Pirate): con los tiempos de espera, el reenvío y las pruebas de salud de Kubernetes se detectan '
+                  'las mismas fallas.'}

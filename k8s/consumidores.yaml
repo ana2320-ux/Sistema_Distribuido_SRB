@@ -18,18 +18,20 @@ spec:
       nodeSelector:
         capa: consumidores
       volumes:
-        - name: resultados
+        - name: codigo     # la carpeta del proyecto (NFS): codigo y librerias en k8s/libs
           hostPath:
-            path: /opt/Clusterv2/Sistema_Distribuido_SRB/resultados
-            type: DirectoryOrCreate
+            path: /opt/Clusterv2/Sistema_Distribuido_SRB
+            type: Directory
       containers:
         - name: clientes
-          image: srb:2
-          imagePullPolicy: Never
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          workingDir: /app
           command: ["sleep", "infinity"]
           envFrom: [{configMapRef: {name: srb-config}}]
+          volumeMounts: [{name: codigo, mountPath: /app}]
           env:
             - {name: HOST_CAPA_SERVICIOS, value: gt}
             - name: HOST_CAPA_CONSUMIDORES
               valueFrom: {fieldRef: {fieldPath: status.podIP}}
-          volumeMounts: [{name: resultados, mountPath: /app/resultados}]
+          volumeMounts: [{name: codigo, mountPath: /app}]

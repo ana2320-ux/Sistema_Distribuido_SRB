@@ -5,4 +5,5 @@ __pycache__/
 .idea/
 datos/*.db*
 resultados/
-srb.tar
+k8s/libs/
+k8s/.token

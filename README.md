@@ -194,90 +194,59 @@ los lanza `capa_cliente.escenarios` (sección 9).
 
 ### 5.4 Despliegue en Kubernetes (k3s)
 
-Cada servicio corre en un contenedor de la imagen `srb:2`, desplegado como Deployment. Las tres
-máquinas son nodos del clúster y un `nodeSelector` fija la capa de cada carga. Los servicios se
-localizan por el nombre DNS de su Service (`persistencia`, `gt`, `cancelaciones`); el `.env` de la
-imagen trae `127.0.0.1` y los manifiestos de `k8s/` ponen las variables reales, que tienen prioridad.
-El código de la aplicación es el mismo que en las secciones 5.1 y 5.2.
+Las tres máquinas forman un clúster de k3s, una capa por nodo. Todo el despliegue son tres
+comandos de `scripts/k8s.sh`, ejecutados desde la carpeta del proyecto (compartida por NFS) con
+las IP reales en el `.env`:
+
+```bash
+bash scripts/k8s.sh servidor     # máquina 2: instala k3s y deja el token en k8s/.token
+bash scripts/k8s.sh agente       # máquinas 1 y 3: se unen al clúster
+bash scripts/k8s.sh desplegar    # máquina 2: etiqueta los nodos, instala las librerías, aplica k8s/ y carga la base
+```
+
+`desplegar` termina mostrando los 7 pods, cada uno en el nodo de su capa. `bash scripts/k8s.sh borrar`
+quita el SRB del clúster; `/usr/local/bin/k3s-uninstall.sh` (máquina 2) y
+`/usr/local/bin/k3s-agent-uninstall.sh` (máquinas 1 y 3) desinstalan k3s.
+
+No se construye ninguna imagen: los contenedores usan `python:3.12-slim` con la carpeta del proyecto
+montada en `/app` y las librerías en `k8s/libs` (las instala `desplegar` la primera vez). Un cambio
+en el código se aplica reiniciando los pods: `sudo k3s kubectl -n srb rollout restart deployment`.
 
 | Manifiesto | Contenido | Nodo |
 |---|---|---|
-| `k8s/00-base.yaml` | Namespace `srb` y ConfigMap con puertos, `TIMEOUT_MS` y `BD_RUTA` | |
-| `k8s/almacenamiento.yaml` | Deployment `persistencia` (1 réplica, un pod con los contenedores `principal` y `lectura` sobre el mismo volumen `hostPath` `/var/tmp/srb`) y su Service | `capa=almacenamiento` |
-| `k8s/negocio.yaml` | `gt` (1 réplica, un pod con los contenedores `activo` y `respaldo`), `rmc` (3 réplicas), `cancelaciones` (1 réplica) y sus Services | `capa=negocio` |
+| `k8s/00-base.yaml` | Namespace `srb` y ConfigMap con los puertos, `TIMEOUT_MS`, `BD_RUTA` y el nombre del Service de persistencia | |
+| `k8s/almacenamiento.yaml` | Deployment `persistencia` (1 réplica: un pod con los contenedores `principal` y `lectura` sobre el mismo volumen `/var/tmp/srb`) y su Service | `capa=almacenamiento` |
+| `k8s/negocio.yaml` | `gt` (1 réplica: un pod con los contenedores `activo` y `respaldo`), `rmc` (3 réplicas), `cancelaciones` (1 réplica) y sus Services | `capa=negocio` |
 | `k8s/consumidores.yaml` | `clientes`: pod en reposo desde el que se lanzan casos de prueba, carga y escenarios | `capa=consumidores` |
 
+Los servicios se encuentran por el nombre DNS de su Service (`persistencia`, `gt`, `cancelaciones`).
 La persistencia lleva una sola réplica porque SQLite admite un único escritor. Los dos contenedores
 del gestor comparten la red del pod: el segundo encuentra los puertos ocupados, queda en espera y
-toma el control cuando el primero cae; el kubelet reinicia el caído, que pasa a ser el respaldo. Los
-contenedores que abren puerto llevan probes `tcpSocket` (liveness y readiness); el RMC no abre puerto
-y Kubernetes solo reinicia su contenedor si el proceso muere.
+toma el control cuando el primero cae, y el contenedor caído se reinicia como respaldo. Los
+contenedores que abren puerto llevan probes `tcpSocket` (liveness y readiness); si un pod cae,
+Kubernetes crea otro.
 
-**Instalación de k3s** (máquina 2 como servidor; máquinas 1 y 3 como agentes):
-
-```bash
-# Máquina 2 (10.43.100.36)
-curl -sfL https://get.k3s.io | sh -
-sudo cat /var/lib/rancher/k3s/server/node-token        # valor de K3S_TOKEN
-
-# Máquinas 1 y 3
-curl -sfL https://get.k3s.io | K3S_URL=https://10.43.100.36:6443 K3S_TOKEN=<token> sh -
-```
-
-**Etiquetas de los nodos** (nombres según `sudo k3s kubectl get nodes`), desde la máquina 2:
+**Uso** (en la máquina 2; `k` abrevia `sudo k3s kubectl -n srb`):
 
 ```bash
-sudo k3s kubectl label node <nodo-maquina-1> capa=consumidores
-sudo k3s kubectl label node <nodo-maquina-2> capa=negocio
-sudo k3s kubectl label node <nodo-maquina-3> capa=almacenamiento
+alias k="sudo k3s kubectl -n srb"
+k exec deploy/clientes -- python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle
+k exec deploy/clientes -- python -m capa_cliente.escenarios --escenario 3 --etiqueta k8s --corrida 1
+k exec deploy/persistencia -c principal -- python -m herramientas.ver_bd
+k exec deploy/persistencia -c principal -- python -m capa_persistencia.cargar_datos    # reinicia la base
+k logs deploy/gt -c activo          # bitácoras: también -c respaldo, deploy/cancelaciones, -l app=rmc --prefix
 ```
 
-En adelante `kubectl` se ejecuta en la máquina 2 (`sudo k3s kubectl`, o con el alias `kubectl`).
-
-**Imagen.** Se construye en una máquina con docker y se importa en cada nodo (los manifiestos usan
-`imagePullPolicy: Never`):
-
-```bash
-bash scripts/k8s-imagen.sh                  # crea srb.tar en la carpeta del proyecto (NFS)
-sudo k3s ctr images import srb.tar          # en cada una de las tres máquinas
-```
-
-**Despliegue y comprobación:**
-
-```bash
-kubectl apply -f k8s/
-kubectl -n srb get pods -o wide             # 7 pods, cada uno en el nodo de su capa
-kubectl -n srb exec deploy/persistencia -c principal -- python -m capa_persistencia.cargar_datos
-kubectl -n srb exec deploy/persistencia -c principal -- python -m herramientas.ver_bd
-```
-
-**Casos de prueba, carga y escenarios** desde el pod de clientes:
-
-```bash
-kubectl -n srb exec deploy/clientes -- python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle
-kubectl -n srb exec deploy/clientes -- python -m capa_cliente.escenarios --escenario 1 --etiqueta k8s --corrida 1
-```
-
-`resultados/` del pod de clientes y del gestor son la carpeta compartida del proyecto, así que
-`gt_metricas.csv` y los CSV de los clientes quedan juntos para `python -m herramientas.analizar_metricas`.
-
-**Bitácoras:**
-
-```bash
-kubectl -n srb logs deploy/persistencia -c principal
-kubectl -n srb logs deploy/gt -c activo        # y -c respaldo
-kubectl -n srb logs -l app=rmc --prefix
-kubectl -n srb logs deploy/cancelaciones
-```
+Los CSV de los clientes y `gt_metricas.csv` quedan en `resultados/` de la carpeta compartida, listos
+para `python -m herramientas.analizar_metricas`.
 
 **Tolerancia a fallas y escalabilidad** (con una carga corriendo):
 
 ```bash
-kubectl -n srb get pods -l app=rmc
-kubectl -n srb delete pod <pod-rmc>                    # un RMC: otro termina la operación y el Deployment crea el reemplazo
-kubectl -n srb exec deploy/gt -c activo -- python -c "import os, signal; os.kill(1, signal.SIGINT)"   # gestor activo: el respaldo toma el control y el contenedor caído se reinicia como respaldo
-kubectl -n srb scale deploy/rmc --replicas=6           # más RMC, sin tocar el resto
-kubectl -n srb get pods -w
+k exec deploy/gt -c activo -- python -c "import os, signal; os.kill(1, signal.SIGINT)"   # cae el gestor activo: el respaldo toma el control
+k delete pod $(k get pod -l app=rmc -o name | head -1)                                    # cae un RMC: otro termina la operación y se crea el reemplazo
+k scale deploy/rmc --replicas=6                                                           # más RMC sin tocar el resto
+k get pods -o wide -w
 ```
 
 ## 6. Estado de la base de datos y bitácoras
@@ -418,9 +387,8 @@ capa_persistencia/   Servicio de Persistencia (principal y réplica de lectura),
 config/              Lectura del .env y definición de los mensajes (protocolo)
 herramientas/        ver_bd (estado de la base de datos) y analizar_metricas
 pruebas/             Pruebas de pytest y casos de prueba (caso_basico.txt, ejemplo.json)
-scripts/             protocolo-pruebas.sh, medir.sh y k8s-imagen.sh
+scripts/             protocolo-pruebas.sh, medir.sh y k8s.sh (despliegue en Kubernetes)
 k8s/                 Manifiestos de Kubernetes (k3s): una capa por archivo
-Dockerfile           Imagen srb:2 de todos los servicios
 docs/                Informe y diagramas de la arquitectura final
 resultados/          CSV de métricas y gráficos (se crea al correr)
 ```

@@ -1,6 +1,7 @@
 # Espacio de nombres y configuración común del SRB.
-# Las variables de entorno de los contenedores tienen prioridad sobre el .env de la imagen
-# (que trae 127.0.0.1), porque load_dotenv no sobreescribe las que ya existen.
+# Todos los contenedores usan la imagen python:3.12-slim con la carpeta del proyecto (NFS) montada
+# en /app y las librerias en k8s/libs (las instala scripts/k8s.sh). Las variables de entorno
+# tienen prioridad sobre el .env de la carpeta, porque load_dotenv no sobreescribe las que existen.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -12,6 +13,9 @@ metadata:
   name: srb-config
   namespace: srb
 data:
+  PYTHONPATH: /app/k8s/libs
+  PYTHONUNBUFFERED: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
   GT_PUERTO_CLIENTES: "5555"
   GT_PUERTO_RMC: "5556"
   GT_PUERTO_CANCELACION: "5557"

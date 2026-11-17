@@ -1,9 +1,0 @@
-.git
-.venv
-venv
-datos
-resultados
-docs
-__pycache__
-*.pyc
-srb.tar
