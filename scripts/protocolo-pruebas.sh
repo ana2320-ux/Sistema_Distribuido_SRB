@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Protocolo de pruebas automaticas del SRB.
-# Ejecuta, en orden, las pruebas de pytest de la carpeta pruebas/ y muestra un resumen
-# PASA / FALLA por tipo de prueba:
-#   1. Unitarias                    2. Integracion y funcionales
-#   3. Concurrencia y consistencia  4. Seguridad basica
-#   5. Tolerancia a fallas
-# Las pruebas arrancan sus propios procesos en este computador (127.0.0.1), en otros
-# puertos y con una base de datos aparte en la carpeta temporal: no tocan un sistema en marcha.
-# Las pruebas de rendimiento, escalabilidad y despliegue se hacen en las tres maquinas
-# (seccion "Medicion del rendimiento" del README).
-#
-# Uso, desde la carpeta del proyecto:   bash scripts/protocolo-pruebas.sh
-# Con uv:                               PYTHON="uv run python" bash scripts/protocolo-pruebas.sh
+# QUÉ HACE: el protocolo de pruebas automáticas. Corre, en orden, las pruebas de pytest de la
+#   carpeta pruebas/ y muestra un resumen PASA / FALLA por tipo de prueba:
+#     1. Unitarias                    2. Integración y funcionales
+#     3. Concurrencia y consistencia  4. Seguridad básica
+#     5. Tolerancia a fallas
+#   Las pruebas arrancan sus propios procesos en este computador (127.0.0.1), en otros puertos y
+#   con una base de datos aparte: no tocan un sistema en marcha. Las pruebas de rendimiento y
+#   escalabilidad las hacen scripts/medir.sh y scripts/k8s-medir.sh.
+# DÓNDE: en cualquier máquina, o en un computador con el proyecto. Tarda cerca de un minuto.
+# USO, desde la carpeta del proyecto:
+#   bash scripts/protocolo-pruebas.sh
+#   PYTHON="uv run python" bash scripts/protocolo-pruebas.sh      # con uv
 
 set -u
 cd "$(dirname "$0")/.."

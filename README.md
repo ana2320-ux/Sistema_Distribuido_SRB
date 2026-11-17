@@ -204,7 +204,9 @@ bash scripts/k8s.sh agente       # máquinas 1 y 3: se unen al clúster
 bash scripts/k8s.sh desplegar    # máquina 2: etiqueta los nodos, instala las librerías, aplica k8s/ y carga la base
 ```
 
-`desplegar` termina mostrando los 7 pods, cada uno en el nodo de su capa. `bash scripts/k8s.sh borrar`
+`desplegar` termina mostrando los 7 pods, cada uno en el nodo de su capa. Para desplegar y además
+medir la arquitectura base y la escalable y analizar los resultados, todo de una vez (unos 50 minutos):
+`bash scripts/k8s-medir.sh` en la máquina 2 (sección 9). `bash scripts/k8s.sh borrar`
 quita el SRB del clúster; `/usr/local/bin/k3s-uninstall.sh` (máquina 2) y
 `/usr/local/bin/k3s-agent-uninstall.sh` (máquinas 1 y 3) desinstalan k3s.
 
@@ -325,6 +327,10 @@ Cada escenario se corre tres veces, 150 segundos, con 20 peticiones por minuto p
    `scp 10.43.100.36:<carpeta del proyecto>/resultados/gt_metricas.csv resultados/`
 6. Máquina 1: `python -m herramientas.analizar_metricas`
 
+Con Kubernetes, todo lo anterior es un solo comando en la máquina 2: `bash scripts/k8s-medir.sh`
+(despliega, mide la base con 1 RMC sin réplica de lectura, mide la escalable con 3 RMC y la réplica,
+reinicia la base antes de cada escenario y analiza).
+
 Un escenario suelto se lanza con
 `python -m capa_cliente.escenarios --escenario 3 --etiqueta base --corrida 1`.
 
@@ -387,7 +393,9 @@ capa_persistencia/   Servicio de Persistencia (principal y réplica de lectura),
 config/              Lectura del .env y definición de los mensajes (protocolo)
 herramientas/        ver_bd (estado de la base de datos) y analizar_metricas
 pruebas/             Pruebas de pytest y casos de prueba (caso_basico.txt, ejemplo.json)
-scripts/             protocolo-pruebas.sh, medir.sh y k8s.sh (despliegue en Kubernetes)
+scripts/             protocolo-pruebas.sh (pruebas), medir.sh (métricas con procesos), k8s.sh (despliegue en
+                     Kubernetes) y k8s-medir.sh (despliegue y métricas en Kubernetes); cada uno explica
+                     en su encabezado qué hace, dónde se corre y cómo
 k8s/                 Manifiestos de Kubernetes (k3s): una capa por archivo
 docs/                Informe y diagramas de la arquitectura final
 resultados/          CSV de métricas y gráficos (se crea al correr)
