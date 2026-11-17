@@ -15,7 +15,8 @@ from config import E_mensaje as m
 
 
 class Cliente:
-    def __init__(self, id_cliente, timeout_ms=config.TIMEOUT_MS):
+    def __init__(self, id_cliente, timeout_ms=config.TIMEOUT_MS, con_hilo=True):
+        """con_hilo=False: sin hilo receptor; quien usa el cliente llama a recibir_pendientes()."""
         self.id_cliente = id_cliente
         self.timeout_ms = timeout_ms
         self.direccion = config.direccion(config.HOST_CAPA_SERVICIOS, config.GT_PUERTO_CLIENTES)
@@ -33,8 +34,10 @@ class Cliente:
             self.contexto.destroy(linger=0)
             raise RuntimeError(f"el puerto {puerto} esta ocupado: ya hay un cliente con el id {id_cliente}")
         self._activo = True
-        self._hilo = threading.Thread(target=self._recibir_notificaciones, daemon=True)
-        self._hilo.start()
+        self._hilo = None
+        if con_hilo:
+            self._hilo = threading.Thread(target=self._recibir_notificaciones, daemon=True)
+            self._hilo.start()
 
     def _nuevo_socket(self):
         socket = self.contexto.socket(zmq.REQ)
@@ -44,8 +47,12 @@ class Cliente:
 
     def _recibir_notificaciones(self):
         while self._activo:
-            if not self._entrada.poll(200, zmq.POLLIN):
-                continue
+            self.recibir_pendientes(200)
+
+    def recibir_pendientes(self, espera_ms=0):
+        """Recibe las notificaciones que ya llegaron; espera hasta espera_ms por la primera."""
+        while self._entrada.poll(espera_ms, zmq.POLLIN):
+            espera_ms = 0
             try:
                 notificacion = m.decodificar(self._entrada.recv())
             except ValueError:
@@ -62,7 +69,10 @@ class Cliente:
         """Espera hasta tener esa cantidad de notificaciones (o hasta el limite). Devuelve cuantas hay."""
         limite = time.time() + (segundos if segundos is not None else 2 * self.timeout_ms / 1000)
         while len(self.notificaciones) < cantidad and time.time() < limite:
-            time.sleep(0.05)
+            if self._hilo:
+                time.sleep(0.05)
+            else:
+                self.recibir_pendientes(50)
         return len(self.notificaciones)
 
     def enviar(self, tipo, datos):
@@ -106,5 +116,6 @@ class Cliente:
 
     def cerrar(self):
         self._activo = False
-        self._hilo.join()
+        if self._hilo:
+            self._hilo.join()
         self.contexto.destroy(linger=0)

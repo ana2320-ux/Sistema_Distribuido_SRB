@@ -46,7 +46,7 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
  'componentes': 'El Gestor de Transacciones es la única entrada. Envía las consultas, reservas y modificaciones a '
                 'los RMC por el canal síncrono (ROUTER/DEALER) y las cancelaciones al Servicio de Cancelaciones por '
                 'el canal asíncrono (PUSH/PULL). Solo los servicios de persistencia tocan la base de datos (Figura '
-                '2). La Tabla 3 resume los componentes agregados y su justificación.',
+                '3). La Tabla 3 resume los componentes agregados y su justificación.',
  'tabla_componentes': [['Kubernetes (k3s)',
                         'Escalabilidad y tolerancia a fallas',
                         'Cada servicio es un contenedor desplegado como Deployment. Un `nodeSelector` fija cada capa '
@@ -98,18 +98,22 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                 'El código de la aplicación es el mismo con Kubernetes y sin él: los manifiestos solo cambian las '
                 'variables de entorno de cada contenedor. Por eso el despliegue con procesos (un comando por '
                 'servicio) se conserva: es la arquitectura base de las mediciones y una alternativa cuando no hay '
-                'clúster. Los manifiestos se han validado en su sintaxis y la aplicación se ha probado con procesos; '
-                'el despliegue en el clúster de las tres máquinas queda por ejecutar (sección 8).'],
- 'clases': 'El código está organizado en un paquete por capa (Figura 3). La lógica de cada servicio está separada de '
+                'clúster. La imagen se ha construido y el sistema se ha ejecutado en contenedores con los mismos '
+                'nombres de servicio, variables y agrupación de los manifiestos (Figura 2): el caso '
+                '`pruebas/caso_basico.txt` dio el resultado esperado y, con una carga de Locust en marcha, el gestor '
+                'activo se detuvo tres veces sin que el cliente recibiera errores; en cada una el contenedor de '
+                'respaldo tomó el control y el contenedor reiniciado quedó como respaldo. Falta aplicar los '
+                'manifiestos en el clúster de las tres máquinas (sección 8).'],
+ 'clases': 'El código está organizado en un paquete por capa (Figura 4). La lógica de cada servicio está separada de '
            'los sockets: `ServicioRMC` y `ServicioPersistencia` reciben una petición y devuelven una respuesta, y '
            'los módulos `main` manejan la comunicación. `BaseDatos` concentra todo el SQL. La base de datos tiene '
-           'cuatro tablas (Figura 4); la tabla `operacion` es la que hace idempotentes las escrituras.',
- 'secuencia': 'En una reserva (Figura 5) el RMC consulta la disponibilidad y, si alcanza, pide confirmar; la '
+           'cuatro tablas (Figura 5); la tabla `operacion` es la que hace idempotentes las escrituras.',
+ 'secuencia': 'En una reserva (Figura 6) el RMC consulta la disponibilidad y, si alcanza, pide confirmar; la '
               'persistencia vuelve a verificar el cupo dentro de la misma transacción, así dos clientes que reservan '
               'a la vez nunca superan la capacidad. La modificación sigue los mismos pasos y, si no hay cupo, deja '
-              'la reserva como estaba. En la cancelación (Figura 6) el gestor responde `ACK` de inmediato y el '
+              'la reserva como estaba. En la cancelación (Figura 7) el gestor responde `ACK` de inmediato y el '
               'resultado llega después como notificación, directamente del Servicio de Cancelaciones al cliente. La '
-              'Figura 7 muestra la recuperación cuando cae un RMC o el gestor activo.',
+              'Figura 8 muestra la recuperación cuando cae un RMC o el gestor activo.',
  'mensajes': 'Toda petición lleva un `uuid`, el tipo, el identificador del cliente y los datos; la respuesta lleva '
              'el mismo `uuid`, un estado (`EXITO`, `FALLO`, `ERROR` o `ACK`) y, si aplica, un motivo. La Tabla 4 '
              'completa la lista de mensajes de la primera entrega con la modificación, la cancelación y la '

@@ -13,11 +13,6 @@ import time
 
 from locust import User, constant_pacing, events, task
 
-# Locust parchea los hilos con gevent: el cliente tiene que usar los sockets de zmq.green,
-# o un poll bloqueante dejaria colgado al hilo de las notificaciones y a la tarea.
-import zmq.green
-sys.modules["zmq"] = zmq.green
-
 from config import E_mensaje as m
 from config import configuracion as config
 from capa_cliente.carga import Carga
@@ -50,7 +45,9 @@ class ClienteSRB(User):
     def on_start(self):
         o = self.environment.parsed_options
         self._ritmo = constant_pacing(60 / o.por_minuto)        # segundos entre el inicio de una peticion y la siguiente
-        self.cliente = Cliente(o.id_cliente)
+        # Sin hilo receptor: Locust convierte los hilos en greenlets de gevent y un poll de ZeroMQ
+        # dentro de uno dejaria colgado al proceso. Las notificaciones se recogen tras cada peticion.
+        self.cliente = Cliente(o.id_cliente, con_hilo=False)
         salida = o.salida or config.RAIZ / "resultados" / f"cliente_{o.id_cliente}.csv"
         try:
             self.carga = Carga(self.cliente, salida, o.consultas, o.modificaciones, o.cancelaciones, semilla=o.semilla)
@@ -71,6 +68,7 @@ class ClienteSRB(User):
     def peticion(self):
         hora = time.time()
         tipo, respuesta, ms = self.carga.enviar_una(hora)
+        self.cliente.recibir_pendientes()
         error = Exception(respuesta["motivo"]) if respuesta["estado"] == m.ERROR else None
         self.environment.events.request.fire(request_type="ZMQ", name=tipo, response_time=ms, response_length=0,
                                              response=None, context={}, exception=error)

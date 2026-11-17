@@ -35,6 +35,7 @@ TIPOS_SINCRONOS = {m.CONSULTA, m.RESERVA, m.MODIFICACION}
 # mitad de lo que espera el cliente, para que el reenvio alcance a responderle.
 ESPERA_RMC_S = config.TIMEOUT_MS * 0.4 / 1000
 MAX_ENVIOS = 2          # el envio original y un reenvio
+ESPERA_SIN_RMC_S = 0.5  # si no hay ningun RMC conectado, cuanto se espera antes de volver a intentar
 
 
 def log(texto):
@@ -118,14 +119,13 @@ class GestorTransacciones:
             log(f"rechazada {tipo} del cliente {cliente}")
             return
 
-        if not self.enviar_a_rmc(frames):
-            self.responder_directo(frames, m.crear_respuesta(
-                peticion, m.ERROR, m.NO_DISPONIBLE, {"razon": "no hay ningun RMC conectado"}))
-            log(f"rechazada {tipo} del cliente {cliente}: no hay RMC conectado")
-            return
         ahora = time.perf_counter()
-        self.pendientes[peticion["uuid"]] = {"inicio": ahora, "enviado": ahora, "envios": 1,
-                                             "frames": frames, "peticion": peticion}
+        pendiente = {"inicio": ahora, "enviado": ahora, "envios": 1, "frames": frames, "peticion": peticion}
+        if not self.enviar_a_rmc(frames):
+            # Ningun RMC conectado: puede ser que este gestor acabe de tomar el control y los RMC
+            # aun se esten reconectando. La peticion espera y se envia en ESPERA_SIN_RMC_S.
+            pendiente.update(envios=0, enviado=ahora - ESPERA_RMC_S + ESPERA_SIN_RMC_S)
+        self.pendientes[peticion["uuid"]] = pendiente
         log(f"<- {tipo} del cliente {cliente}")
 
     def enviar_a_rmc(self, frames):
@@ -193,6 +193,16 @@ class GestorTransacciones:
                 continue
             peticion = p["peticion"]
             tipo, cliente = peticion["tipo"], peticion["id_cliente"]
+            if p["envios"] == 0:                       # nunca salio: no habia ningun RMC conectado
+                if self.enviar_a_rmc(p["frames"]):
+                    p["enviado"] = ahora
+                    p["envios"] = 1
+                else:
+                    del self.pendientes[uuid]
+                    self.responder_directo(p["frames"], m.crear_respuesta(
+                        peticion, m.ERROR, m.NO_DISPONIBLE, {"razon": "no hay ningun RMC conectado"}))
+                    log(f"rechazada {tipo} del cliente {cliente}: no hay RMC conectado")
+                continue
             reenvio = p["frames"][:-1] + [m.codificar({**peticion, "reintento": True})]
             if p["envios"] < MAX_ENVIOS and self.enviar_a_rmc(reenvio):
                 p["enviado"] = ahora

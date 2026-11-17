@@ -1,0 +1,49 @@
+@startuml
+!include _estilo.puml
+title Diagrama de despliegue - Clúster de Kubernetes (k3s), una capa por nodo
+left to right direction
+
+node "Nodo máquina 1 (10.43.99.236)\netiqueta capa=consumidores" as n1 {
+  node "Pod clientes" as pc {
+    component "Clientes y Locust\n(PULL :6000 + id)" as cli
+  }
+}
+
+node "Nodo máquina 2 (10.43.100.36)\netiqueta capa=negocio, servidor de k3s" as n2 {
+  node "Pod gt (Deployment, 1 réplica)" as pgt {
+    component "contenedor activo\nROUTER :5555, DEALER :5556" as gta
+    component "contenedor respaldo\n(en espera)" as gtr
+  }
+  node "Pods rmc (Deployment, 3 réplicas)" as prmc {
+    component "RMC × 3" as rmc
+  }
+  node "Pod cancelaciones (Deployment)" as pcan {
+    component "Servicio de Cancelaciones\nPULL :5557" as canc
+  }
+  interface "Service gt\n5555, 5556" as sgt
+  interface "Service cancelaciones\n5557" as scan
+}
+
+node "Nodo máquina 3 (10.43.99.246)\netiqueta capa=almacenamiento" as n3 {
+  node "Pod persistencia (Deployment, 1 réplica)" as pper {
+    component "contenedor principal\nREP :5558" as sp
+    component "contenedor lectura\nREP :5559" as spl
+  }
+  database "hostPath /var/tmp/srb\nSQLite (WAL)" as bd
+  interface "Service persistencia\n5558, 5559" as sper
+}
+
+cli --> sgt : REQ/REP
+sgt --> gta
+gta ..> gtr : comparten la red del pod:\nel respaldo toma los puertos
+rmc --> sgt : se conectan al gestor\n(ROUTER/DEALER)
+gta --> scan : PUSH/PULL
+scan --> canc
+rmc --> sper : REQ/REP\nescrituras :5558, consultas :5559
+canc --> sper : REQ/REP
+sper --> sp
+sper --> spl
+sp --> bd
+spl --> bd
+canc --> cli : PUSH/PULL\nnotificación a la IP del pod
+@enduml
