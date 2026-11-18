@@ -4,7 +4,8 @@ datos de docs/informe/datos/ (resumen.csv, saturacion.csv, fallas.csv y los graf
 diagramas de docs/diagramas/png/. Necesita python-docx.
 
 Uso (desde la raiz del proyecto):   python docs/informe/generar_informe.py
-Despues, en Word: actualizar las tres tablas de contenido y exportar a PDF.
+Despues, en Word: actualizar las tres tablas de contenido y exportar a PDF. Sin Word (Linux, con
+LibreOffice):   /usr/bin/python3 docs/informe/exportar_pdf.py
 """
 import csv
 from pathlib import Path
@@ -239,6 +240,7 @@ def mejora(base, nuevo, menor_es_mejor=True):
 resumen = {(f["arquitectura"], int(f["clientes"]), f["operacion"]): f for f in leer("resumen.csv")}
 saturacion = {(f["arquitectura"], f["operacion"]): f for f in leer("saturacion.csv")}
 fallas = {f["evento"]: f for f in leer("fallas.csv")}
+fallas_k8s = leer("fallas_k8s.csv")
 OPERACIONES = [("CONSULTA", "Consulta"), ("RESERVA", "Reserva"), ("MODIFICACION", "Modificación")]
 ESCENARIOS = [3, 5, 8]
 
@@ -293,15 +295,18 @@ titulo2("2.2 Software")
 tabla("Software utilizado",
       ["Elemento", "Versión", "Uso"],
       [["Ubuntu", "22.04.5 LTS", "Sistema operativo de las tres máquinas"],
-       ["Python", "3.12 o superior (3.13.6 en la medición)", "Lenguaje de todos los procesos"],
-       ["ZeroMQ (`pyzmq`)", "pyzmq 27.3.0, libzmq 4.3.5", "Comunicación entre procesos: REQ/REP, ROUTER/DEALER y PUSH/PULL"],
-       ["SQLite", "3.50.4, en modo WAL", "Base de datos del Servicio de Persistencia"],
+       ["Python", "3.12 o superior: 3.15.2 en las máquinas (con `uv`) y 3.12.16 en los contenedores",
+        "Lenguaje de todos los procesos"],
+       ["ZeroMQ (`pyzmq`)", "pyzmq 27.2.0 (27.3.0 en los contenedores), libzmq 4.3.5",
+        "Comunicación entre procesos: REQ/REP, ROUTER/DEALER y PUSH/PULL"],
+       ["SQLite", "3.53.1 (3.46.1 en los contenedores), en modo WAL", "Base de datos del Servicio de Persistencia"],
        ["`python-dotenv`", "1.2", "Lectura de la configuración (`.env`)"],
        ["`uv`", "–", "Instalación de dependencias y ejecución"],
        ["Locust", "2.47.0", "Generación de la carga de los clientes"],
-       ["Kubernetes (k3s) y Docker", "–", "Despliegue de los servicios en contenedores, una capa por nodo"],
+       ["Kubernetes (k3s)", "v1.37.2+k3s1, imagen `python:3.12-slim`",
+        "Despliegue de los servicios en contenedores, una capa por nodo"],
        ["`pytest`", "9.2.0", "Pruebas unitarias, de integración y de tolerancia a fallas"],
-       ["`matplotlib`", "3.10.9", "Gráficos de las métricas"]],
+       ["`matplotlib`", "3.11.2", "Gráficos de las métricas"]],
       [3.6, 5.2, 7.6])
 
 titulo2("2.3 Herramientas de medición")
@@ -432,11 +437,16 @@ titulo1("7. Conclusiones")
 for texto in T["conclusiones"]:
     parrafo(texto)
 
-titulo1("8. Mediciones en las tres máquinas")
-for texto in T["tres_maquinas"]:
+titulo1("8. Tolerancia a fallas en Kubernetes")
+for texto in T["kubernetes_maquinas"][:2]:
     parrafo(texto)
-for texto in T["pasos_tres_maquinas"]:
-    vineta(texto)
+tabla("Recuperación medida en el clúster de Kubernetes al provocar fallas durante una carga",
+      ["Falla provocada", "Peticiones enviadas", "Con error", "Mayor tiempo de respuesta", "Base de datos al final"],
+      [[f["descripcion"], f["peticiones"], f["errores"], f"{num(f['max_ms'], 0)} ms", f["consistencia"]]
+       for f in fallas_k8s],
+      [5.4, 2.3, 1.8, 3.0, 3.9], texto_nota=T["nota_fallas_k8s"])
+for texto in T["kubernetes_maquinas"][2:]:
+    parrafo(texto)
 
 titulo1("Referencias")
 for texto in T["referencias"]:

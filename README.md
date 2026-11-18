@@ -383,6 +383,7 @@ Respuesta: {"uuid": "...", "estado": "EXITO", "motivo": null, "datos": {...}}
 | La cancelación responde `ACK` pero no llega la notificación | El Servicio de Cancelaciones no está en marcha, o los puertos 6001 en adelante de la máquina 1 están cerrados | Se arranca el servicio y se revisa la regla de `ufw` de la máquina 1 |
 | `el puerto 6001 esta ocupado` | Ya hay un cliente con ese `--id` | Se usa otro `--id` |
 | `database is locked` o errores de SQLite | `BD_RUTA` apunta a un disco de red (NFS), que no admite el modo WAL de SQLite | `BD_RUTA` debe ser una ruta del disco local de la máquina 3, como la que trae el `.env` (`/var/tmp/srb/srb.db`) |
+| `PermissionError` en `resultados/gt_metricas.csv` al arrancar el gestor como proceso | El SRB también está desplegado en Kubernetes: los pods escriben en la misma carpeta `resultados/` (NFS) con otro usuario, y los dos despliegues usan la misma base de datos de la máquina 3 | Se usa un solo despliegue a la vez: `bash scripts/k8s.sh borrar` antes de levantar los procesos, o se detienen los procesos antes de `bash scripts/k8s.sh desplegar` |
 
 ## 12. Estructura del proyecto
 

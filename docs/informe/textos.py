@@ -15,13 +15,14 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
  'hardware': 'El sistema se despliega en tres máquinas con Ubuntu, una por capa (Tabla 1). Las tres tienen el mismo '
              'procesador (4 núcleos asignados a cada máquina) y la misma memoria. La carpeta del proyecto está '
              'compartida por NFS entre las tres; la base de datos queda en el disco local de la máquina 3.',
- 'equipo_medicion': 'Las mediciones de este informe se han tomado en un solo computador: procesador Intel Core '
-                    'i7-13700HX (16 núcleos, 24 hilos), 31,8 GB de RAM y Windows 11 Home. Las tres capas corren en '
-                    'él como procesos separados que se comunican por TCP con ZeroMQ, igual que en el despliegue, '
-                    'pero sin la latencia de la red entre máquinas. Por eso los tiempos absolutos son menores que '
-                    'los que se obtendrán en las tres máquinas; la comparación entre la arquitectura base y la '
-                    'escalable sí es válida, porque ambas se midieron en el mismo equipo y con la misma carga. La '
-                    'sección 8 indica cómo se repiten las mediciones en las tres máquinas.',
+ 'equipo_medicion': 'Las mediciones de este informe se han tomado en las tres máquinas del despliegue, con los '
+                    'servicios como procesos: los clientes de Locust en la máquina 1, la capa de negocio en la '
+                    'máquina 2 y la persistencia en la máquina 3, comunicados por la red de la sala. Las máquinas y '
+                    'la red son compartidas, así que otros usuarios pueden estar trabajando en ellas durante una '
+                    'medición. Antes se habían hecho las mismas pruebas en un portátil, con las tres capas en un '
+                    'solo equipo; en las máquinas los tiempos son entre 2 y 3,5 veces mayores, porque cada petición '
+                    'cruza la red de la máquina 1 a la 2 y de la 2 a la 3, y de vuelta, y cada máquina tiene 4 '
+                    'núcleos. El despliegue en Kubernetes se ha comprobado en las mismas máquinas (sección 8).',
  'herramientas': ['El tiempo de respuesta se mide en el cliente con `time.perf_counter()` de Python: desde que envía '
                   'la petición hasta que recibe la respuesta. Cada cliente guarda una fila por petición en un '
                   'archivo CSV (hora de envío, tipo, estado, motivo, milisegundos y `uuid`).',
@@ -102,12 +103,20 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                 'desplegar). El código es el mismo con Kubernetes y sin él: los manifiestos solo cambian las '
                 'variables de entorno de cada contenedor, y el despliegue con procesos se conserva como arquitectura '
                 'base de las mediciones.',
-                'El despliegue se ha probado en un clúster k3s de tres nodos levantado con contenedores de Docker en '
-                'un solo computador, con el paso `desplegar` del script: los siete pods quedaron cada uno en el nodo '
-                'de su capa, el caso `pruebas/caso_basico.txt` dio el resultado esperado y, con una carga de Locust '
-                'en marcha, se detuvo el gestor activo y se borró un pod del RMC sin que el cliente recibiera '
-                'errores; el respaldo tomó el control, Kubernetes creó un RMC nuevo y la base de datos quedó '
-                'consistente. Falta repetirlo en las tres máquinas (sección 8).'],
+                'El despliegue se ha probado en las tres máquinas: `scripts/k8s.sh` ha instalado k3s con el servidor '
+                'en la máquina 2 y los agentes en las máquinas 1 y 3, y el paso `desplegar` ha dejado los siete pods '
+                'cada uno en el nodo de su capa en unos 30 segundos. El caso `pruebas/caso_basico.txt`, lanzado desde '
+                'el pod de clientes, ha dado el resultado esperado, y las pruebas de fallas dentro del clúster están '
+                'en la sección 8.',
+                'En las máquinas han aparecido dos problemas que no se veían en un solo computador. El primero es '
+                'que k3s usa por defecto la red 10.43.0.0/16 para los Services, y esa red contiene la de la sala '
+                '(10.43.96.0/20): un Service podía recibir la dirección de una máquina y quitarle su tráfico. El '
+                'script fija rangos propios, 172.30.0.0/16 para los pods y 172.31.0.0/16 para los Services. El '
+                'segundo es que un pod que se conecta a un Service antes de que k3s termine de crear sus reglas de '
+                'red deja ese intento de conexión colgado, y Linux lo repite durante unos dos minutos; por eso los '
+                'RMC tardaban en conectarse al gestor recién desplegado. Los procesos que se conectan a otro '
+                'servicio fijan ahora un tiempo máximo de conexión de 1 segundo (la opción `CONNECT_TIMEOUT` de '
+                'ZeroMQ), de modo que el intento se abandona y se repite enseguida.'],
  'clases': 'El código está organizado en un paquete por capa (Figura 4). La lógica de cada servicio está separada de '
            'los sockets: `ServicioRMC` y `ServicioPersistencia` reciben una petición y devuelven una respuesta, y '
            'los módulos `main` manejan la comunicación. `BaseDatos` concentra todo el SQL. La base de datos tiene '
@@ -311,34 +320,37 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                      ['Despliegue',
                       'Arrancar el sistema con las IP reales, una capa por máquina',
                       'Funciona en las tres máquinas siguiendo el README',
-                      'Clúster k3s de tres nodos en contenedores: los siete pods en el nodo de su capa y el caso '
-                      'básico correcto. Falta en las tres máquinas',
-                      'Pendiente'],
+                      'Con procesos y con Kubernetes (k3s, los siete pods en el nodo de su capa): el caso básico da '
+                      'el resultado esperado y la base queda consistente',
+                      'Pasa (1)'],
                      ['Seguridad básica',
                       'Mensajes mal formados, identificadores inexistentes y cantidades excesivas',
                       'Rechazo controlado: el sistema no se cae ni cambia la base',
                       '13 mensajes (texto que no es JSON, tipos internos, 1 000 000 000 de asientos, inyección SQL, '
                       'cancelación sin dirección) rechazados; la base no cambia y el sistema sigue atendiendo',
                       'Pasa']],
- 'nota_protocolo': '(1) Ejecutado con todos los procesos en un solo computador, comunicados por TCP. Falta repetirlo '
-                   'entre las tres máquinas (sección 8).',
- 'fallas': ['Además de las pruebas automáticas, se ha medido la recuperación con los tiempos de espera reales. Con '
-            'la arquitectura escalable en marcha, tres clientes envían 120 peticiones por minuto cada uno durante 40 '
-            'segundos (40 % consultas; el resto reservas, modificaciones y cancelaciones) y a los 15 segundos se '
-            'mata un proceso. La Tabla 7 muestra el resultado.',
+ 'nota_protocolo': '(1) Ejecutado en las tres máquinas del despliegue. Las pruebas automáticas de `pytest` corren en '
+                   'un solo computador, con los procesos comunicados por TCP.',
+ 'fallas': ['Además de las pruebas automáticas, se ha medido la recuperación en las tres máquinas, con los tiempos '
+            'de espera reales. Con la arquitectura escalable en marcha, tres clientes de Locust envían 120 '
+            'peticiones por minuto cada uno durante 40 segundos (40 % consultas; el resto reservas, modificaciones '
+            'y cancelaciones) y a los 15 segundos se mata un proceso con `kill -9`. La Tabla 7 muestra el '
+            'resultado.',
             'En los cuatro casos ningún cliente recibió un error, todas las cancelaciones aceptadas se notificaron y '
             'la base de datos quedó consistente: los asientos ocupados coinciden con las reservas activas. Al caer '
-            'el Gestor de Transacciones, la petición más lenta tardó cerca de 1 segundo, que es lo que demora el '
-            'gestor de respaldo en tomar los puertos. Al caer la réplica de lectura, la petición más lenta tardó 1,7 '
-            'segundos: es el tiempo que el RMC espera a la réplica antes de pasar la consulta al servicio principal; '
-            'las siguientes consultas van directo al principal. La caída de un RMC y la del Servicio de '
-            'Cancelaciones no se notaron en los tiempos.'],
+            'el Gestor de Transacciones, las dos peticiones que iban en camino tardaron 0,72 segundos, lo que '
+            'demoró el gestor de respaldo en tomar los puertos (lo intenta cada segundo). Al caer la réplica de '
+            'lectura, la petición más lenta tardó 1,7 segundos: es el tiempo que el RMC espera a la réplica antes '
+            'de pasar la consulta al servicio principal; las siguientes consultas van directo al principal. La '
+            'caída de un RMC y la del Servicio de Cancelaciones no se notaron en los tiempos.'],
  'nota_fallas': 'La arquitectura tenía tres RMC. El Servicio de Cancelaciones se arrancó de nuevo 10 segundos '
-                'después de matarlo; las cancelaciones aceptadas en ese intervalo se procesaron al volver.',
+                'después de matarlo; las cancelaciones aceptadas en ese intervalo se procesaron al volver. La prueba '
+                'del gestor se ha repetido: en la primera ejecución ninguna petición coincidió con el cambio de '
+                'gestor y el mayor tiempo fue de 51 ms.',
  'experimentos': ['Se han medido los tres escenarios de la Tabla 1 del enunciado: 3 clientes (2 solo consultan y 1 '
                   'consulta y reserva), 5 clientes (3 solo consultan y 2 reservan y modifican) y 8 clientes (4 solo '
-                  'consultan y 4 reservan y modifican). Cada cliente es un proceso de Locust que envía 20 peticiones '
-                  'por minuto a ritmo fijo durante 150 segundos. Cada escenario se ha corrido tres veces en cada '
+                  'consultan y 4 reservan y modifican). Cada cliente es un proceso de Locust en la máquina 1 que '
+                  'envía 20 peticiones por minuto a ritmo fijo durante 150 segundos. Cada escenario se ha corrido tres veces en cada '
                   'arquitectura, con la base de datos recién cargada antes de cada escenario; los valores de las '
                   'tablas reúnen las tres corridas. La semilla del azar de cada cliente depende de la corrida y de '
                   'su número, de modo que la arquitectura base y la escalable reciben exactamente las mismas '
@@ -347,73 +359,93 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                   'Servicio de Persistencia. La escalable tiene además un gestor de respaldo, tres RMC y la réplica '
                   'de lectura.'],
  'nota_tiempos': 'El cambio del promedio es positivo cuando la arquitectura escalable responde más rápido que la '
-                 'base. Mediciones en un solo computador.',
+                 'base. Mediciones en las tres máquinas.',
  'nota_tpm': 'TPM contadas en el Gestor de Transacciones. Cada cliente envía 20 peticiones por minuto, así que las '
              'TPM esperadas son 60, 100 y 160 en total.',
  'saturacion': ['Con 20 peticiones por minuto por cliente el sistema trabaja muy por debajo de su capacidad, así que '
                 'los tres escenarios no muestran dónde se satura. Para encontrarlo se ha hecho una prueba adicional: '
                 'los 8 clientes del escenario 3 envían una petición apenas reciben la respuesta de la anterior, sin '
                 'pausa, durante 60 segundos. Para que las reservas no se rechazaran por falta de cupo, en esta '
-                'prueba cada ocurrencia se cargó con 10 000 000 de asientos (Tabla 10).'],
- 'nota_saturacion': 'Una corrida por arquitectura. En esta prueba las TPM son la capacidad máxima del sistema con 8 '
-                    'clientes.',
+                'prueba cada ocurrencia se cargó con 10 000 000 de asientos. Se han hecho dos corridas con la '
+                'arquitectura base y tres con la escalable; la Tabla 10 reúne todas.'],
+ 'nota_saturacion': 'Promedio de las corridas: dos en la base y tres en la escalable. La primera corrida escalable '
+                    'se degradó a partir del segundo 40 (sección 6) y baja el promedio de sus TPM. En esta prueba las '
+                    'TPM son la capacidad del sistema con 8 clientes.',
  'analisis': ['Con la carga del enunciado las dos arquitecturas atienden todo lo que reciben. Las transacciones por '
               'minuto son las que envían los clientes (61, 102 y 163 en total, frente a 60, 100 y 160 esperadas) y '
-              'son iguales en la arquitectura base y en la escalable; la tasa de error es 0 % en todos los casos. A '
-              'esta carga las TPM dependen de los clientes y no de la arquitectura: 160 peticiones por minuto son '
-              'menos de 3 por segundo y cada una se atiende en menos de 7 milisegundos.',
-              'El tiempo de respuesta de la consulta es prácticamente el mismo en las dos arquitecturas (entre 2,6 y '
-              '3,1 ms) y no crece con el número de clientes; la escalable es entre 3 % y 5 % más rápida. En la '
-              'reserva y la modificación la arquitectura escalable es más lenta, entre 1 y 2 ms: una reserva tarda '
-              'de 3,6 a 4,7 ms en la base y de 4,9 a 6,7 ms en la escalable. La causa es que en la escalable cada '
-              'escritura usa dos servicios de persistencia: la disponibilidad se consulta en la réplica de lectura y '
-              'la confirmación va al principal, que además comparte la base de datos con la réplica. Es el costo de '
-              'la escalabilidad cuando la carga es baja: más procesos y más saltos, sin filas que acortar.',
-              'La desviación estándar es pequeña frente al promedio en casi todos los casos. La más alta es la de la '
-              'reserva con 3 clientes (2,2 ms en la base y 5,4 ms en la escalable): en ese escenario hay solo 78 '
-              'reservas en total y las primeras de cada corrida, que abren las conexiones, pesan más en el cálculo. '
-              'El percentil 95 queda por debajo de 9 ms en todos los escenarios.',
-              'La diferencia aparece en la prueba de saturación. Con los 8 clientes enviando sin pausa, la '
-              'arquitectura base procesa unas 34 600 transacciones por minuto y cada petición tarda 13,8 ms, porque '
-              'todas hacen fila en el único RMC, que atiende una a la vez. La arquitectura escalable procesa unas 90 '
-              '800 transacciones por minuto, 2,6 veces más: las consultas pasan de 17 294 a 52 207 por minuto (+202 '
-              '%) y las reservas de 8 664 a 19 383 (+124 %), y el tiempo promedio baja a 4,6 ms en la consulta y a '
-              '6,2 ms en la reserva. Las consultas mejoran más que las escrituras porque se reparten entre los tres '
-              'RMC y la réplica de lectura, mientras que todas las escrituras terminan en el único proceso de '
-              'persistencia principal, que pasa a ser el cuello de botella.',
+              'son iguales en la arquitectura base y en la escalable; ninguna de las 4 800 peticiones terminó en '
+              'error. A esta carga las TPM dependen de los clientes y no de la arquitectura: 160 peticiones por '
+              'minuto son menos de 3 por segundo y cada una se atiende en unos 10 milisegundos.',
+              'En la consulta la arquitectura base se va haciendo más lenta a medida que crecen los clientes (de '
+              '7,9 ms con 3 clientes a 9,6 ms con 8), porque todas las peticiones pasan por su único RMC y empiezan '
+              'a coincidir. En la escalable la consulta se mantiene entre 7,4 y 8,0 ms; con 8 clientes es 22 % más '
+              'rápida que en la base y su percentil 95 baja de 16,4 a 9,9 ms, porque las consultas se reparten '
+              'entre los tres RMC y la réplica de lectura. En la reserva y la modificación las dos arquitecturas '
+              'quedan casi iguales, cerca de 11 ms: la escalable es hasta 6 % más lenta con 3 y 5 clientes y entre '
+              '4 % y 6 % más rápida con 8. En las máquinas la escalable no hace más viajes por la red que la base: '
+              'la disponibilidad se consulta en la réplica en lugar del principal, y los dos están en la máquina 3. '
+              'El costo de 1 a 2 ms en las escrituras que se había visto en un solo computador, donde todos los '
+              'procesos compartían los mismos núcleos, aquí queda dentro de la variación normal.',
+              'La desviación estándar es pequeña frente al promedio en todos los casos (4,7 ms como máximo) y el '
+              'percentil 95 queda por debajo de 20 ms en todos los escenarios. Los tiempos son entre 2 y 3,5 veces '
+              'los del portátil: la mayor parte de cada petición es el tiempo de la red entre las máquinas.',
+              'La diferencia grande aparece en la prueba de saturación. Con los 8 clientes enviando sin pausa, la '
+              'arquitectura base procesa unas 14 300 transacciones por minuto y cada petición tarda unos 33 ms, '
+              'porque todas hacen fila en el único RMC, que atiende una a la vez. La arquitectura escalable procesa '
+              'en promedio unas 28 900 transacciones por minuto, el doble: las consultas pasan de 7 129 a 16 073 '
+              'por minuto (+125 %) y las reservas de 3 545 a 6 404 (+81 %), y el tiempo promedio baja a 14,8 ms en '
+              'la consulta y a 19,2 ms en la reserva. Las consultas mejoran más que las escrituras porque se '
+              'reparten entre los tres RMC y la réplica de lectura, mientras que todas las escrituras terminan en el '
+              'único proceso de persistencia principal, que pasa a ser el cuello de botella.',
+              'El promedio de la escalable incluye una corrida que se degradó. Dos de las tres corridas procesaron '
+              '36 629 y 33 997 peticiones por minuto, entre 2,4 y 2,6 veces la base, con una mediana de 11 a 12 ms, '
+              'lo mismo que se había medido en el portátil. La primera corrida mantuvo ese ritmo, unas 550 '
+              'peticiones por segundo, durante 40 segundos; desde ahí bajó a unas 20 por segundo, con medianas de '
+              '300 a 400 ms, hasta el final, y Locust detuvo a los clientes a los 96 segundos en lugar de a los 60. '
+              'La prueba se ha repetido dos veces vigilando cada 5 segundos la CPU de cada proceso y el archivo WAL '
+              'de SQLite: ningún proceso llegó al 100 % de un núcleo, el WAL se mantuvo en su tamaño normal (4 MB) '
+              'y la degradación no volvió a aparecer. Su causa no se ha podido determinar; como las máquinas y la '
+              'red son compartidas, no se descarta que haya sido una interferencia externa.',
               'En cuanto a los patrones de comunicación, el ROUTER/DEALER del Gestor de Transacciones permitió '
               'escalar sin cambiar el gestor ni los clientes, y el PUSH/PULL de la cancelación mantuvo su respuesta '
               'inmediata aun con el Servicio de Cancelaciones caído. La tolerancia a fallas no costó rendimiento '
-              'medible con la carga del enunciado, y en las pruebas de la sección 4.1 ninguna falla produjo errores '
-              'ni operaciones duplicadas.'],
- 'conclusiones': ['El sistema final implementa las cuatro operaciones, está preparado para correr con una capa por '
-                  'máquina y tolera la caída del Gestor de Transacciones, de un RMC, del Servicio de Cancelaciones y '
-                  'de la réplica de lectura sin que el cliente reciba errores y sin perder ni repetir operaciones. '
-                  'La pieza que lo hace posible es la idempotencia de las escrituras por `uuid`: gracias a ella '
-                  'cualquier capa puede reenviar una petición sin riesgo.',
-                  'Con la carga del enunciado (hasta 8 clientes y 20 peticiones por minuto cada uno) la arquitectura '
-                  'escalable no mejora las métricas: las TPM son iguales, la consulta mejora menos de 5 % y la '
-                  'reserva empeora entre 1 y 2 ms. La arquitectura base es suficiente para esa carga. La mejora real '
-                  'se ve cuando el sistema se satura: la arquitectura escalable procesa 2,6 veces más transacciones '
-                  'por minuto y responde entre 2 y 3 veces más rápido.',
-                  'La recomendación es desplegar la arquitectura escalable. Para una universidad con más de 10 000 '
-                  'estudiantes la carga real tendrá picos muy superiores a los del enunciado, el costo a baja carga '
-                  'es de 1 a 2 ms en las escrituras, y es la única de las dos que tolera fallas. Si la carga de '
-                  'escritura creciera más, el siguiente paso sería cambiar SQLite por un motor con varios '
-                  'escritores, porque el Servicio de Persistencia principal es el límite de la arquitectura actual.'],
- 'tres_maquinas': ['Las cifras de este informe corresponden a un solo computador. Para obtenerlas en las tres '
-                   'máquinas del despliegue se siguen estos pasos, detallados en la sección 9 del README; el informe '
-                   'se regenera con `python docs/informe/generar_informe.py` después de copiar los resultados a '
-                   '`docs/informe/datos/`.'],
- 'pasos_tres_maquinas': ['Clúster: con las IP reales en el `.env`, `bash scripts/k8s.sh servidor` en la máquina 2, '
-                         '`bash scripts/k8s.sh agente` en las máquinas 1 y 3, y `bash scripts/k8s.sh desplegar` en '
-                         'la máquina 2 (sección 5.4 del README); el caso `pruebas/caso_basico.txt` desde el pod de '
-                         'clientes comprueba el despliegue.',
-                         'Máquinas 3 y 2: se levanta la arquitectura base. Máquina 1: `bash scripts/medir.sh base`.',
-                         'Máquinas 3 y 2: se levanta la arquitectura escalable. Máquina 1: `bash scripts/medir.sh '
-                         'escalable`.',
-                         'Se copia `resultados/gt_metricas.csv` de la máquina 2 a la máquina 1 y se ejecuta `python '
-                         '-m herramientas.analizar_metricas`.'],
+              'medible con la carga del enunciado, y en las pruebas de las secciones 4.1 y 8 ninguna falla produjo '
+              'errores ni operaciones duplicadas.'],
+ 'conclusiones': ['El sistema final implementa las cuatro operaciones, corre en las tres máquinas con una capa por '
+                  'máquina, como procesos o en un clúster de Kubernetes, y tolera la caída del Gestor de '
+                  'Transacciones, de un RMC, del Servicio de Cancelaciones y de la réplica de lectura sin que el '
+                  'cliente reciba errores y sin perder ni repetir operaciones. La pieza que lo hace posible es la '
+                  'idempotencia de las escrituras por `uuid`: gracias a ella cualquier capa puede reenviar una '
+                  'petición sin riesgo.',
+                  'Con la carga del enunciado (hasta 8 clientes y 20 peticiones por minuto cada uno) las TPM son las '
+                  'mismas en las dos arquitecturas, porque las fija la carga. La escalable mejora la consulta a '
+                  'medida que crecen los clientes (22 % más rápida con 8) y deja las escrituras prácticamente '
+                  'iguales. La mejora grande se ve cuando el sistema se satura: la arquitectura escalable procesa '
+                  'el doble de transacciones por minuto en promedio, entre 2,4 y 2,6 veces en las corridas sin '
+                  'degradación, y responde entre 2 y 3 veces más rápido.',
+                  'La recomendación es desplegar la arquitectura escalable en Kubernetes. Para una universidad con '
+                  'más de 10 000 estudiantes la carga real tendrá picos muy superiores a los del enunciado, en las '
+                  'máquinas no cuesta rendimiento a baja carga, y es la única de las dos que tolera fallas; '
+                  'Kubernetes agrega la recreación automática de los procesos caídos. Si la carga de escritura '
+                  'creciera más, el siguiente paso sería cambiar SQLite por un motor con varios escritores, porque el '
+                  'Servicio de Persistencia principal es el límite de la arquitectura actual.'],
+ 'kubernetes_maquinas': ['En el clúster k3s de las tres máquinas se han repetido las pruebas de fallas de la sección '
+                         '4.1, adaptadas a Kubernetes: tres clientes de Locust corren en el pod de clientes, cada uno '
+                         'con 120 peticiones por minuto durante 40 segundos, y a los 15 segundos se provoca la falla. '
+                         'La Tabla 11 muestra el resultado.',
+                         'En los tres casos ningún cliente recibió un error y la base de datos quedó consistente. Al '
+                         'caer el proceso del gestor activo, el respaldo del mismo pod tomó los puertos en cerca de 1 '
+                         'segundo y Kubernetes reinició el contenedor caído, que quedó como nuevo respaldo. Al borrar '
+                         'un pod del RMC, los otros dos siguieron atendiendo y Kubernetes creó uno nuevo. Al caer los '
+                         'dos procesos del gestor a la vez no quedó ningún gestor: Kubernetes reinició los dos '
+                         'contenedores, los RMC se reconectaron solos y las peticiones que iban en camino llegaron al '
+                         'gestor nuevo en 1,5 segundos como máximo.',
+                         'Las mediciones de rendimiento de la sección 5 se han tomado con los servicios como procesos, '
+                         'que permite cambiar entre la arquitectura base y la escalable sin reinstalar nada. En el '
+                         'clúster se repiten con un solo comando, `bash scripts/k8s-medir.sh` (sección 9 del README).'],
+ 'nota_fallas_k8s': 'Borrar el pod del gestor con `kubectl delete pod` no sirve como prueba de caída: Python, como '
+                    'primer proceso del contenedor, ignora la señal de terminación y el pod sigue atendiendo durante '
+                    'los 30 segundos de gracia. Por eso se mataron sus dos procesos con `kill -9`.',
  'referencias': ['Coulouris, G., Dollimore, J., Kindberg, T., & Blair, G. (2012). *Distributed systems: Concepts and '
                  'design* (5.ª ed.). Addison-Wesley.',
                  "Hintjens, P. (2013). *ZeroMQ: Messaging for many applications*. O'Reilly Media. "
