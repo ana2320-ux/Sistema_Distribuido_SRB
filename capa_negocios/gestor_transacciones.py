@@ -58,6 +58,10 @@ class GestorTransacciones:
     def __init__(self, ruta_metricas="resultados/gt_metricas.csv"):
         """Lanza zmq.ZMQError si los puertos ya estan ocupados (hay otro GT activo)."""
         self.contexto = zmq.Context()
+        # Un intento de conexion que no se completa en 1 s se abandona y se repite. En Kubernetes,
+        # si un pod se conecta a un Service antes de que existan sus reglas de red, el primer
+        # intento queda colgado y Linux lo sigue reintentando unos 2 minutos.
+        self.contexto.setsockopt(zmq.CONNECT_TIMEOUT, 1000)
         try:
             self.frontend = self.contexto.socket(zmq.ROUTER)      # lado de los clientes
             self.frontend.bind(config.direccion_bind(config.GT_PUERTO_CLIENTES))

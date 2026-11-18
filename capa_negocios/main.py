@@ -53,6 +53,7 @@ def arrancar_gt():
 
 def arrancar_rmc():
     contexto = zmq.Context()
+    contexto.setsockopt(zmq.CONNECT_TIMEOUT, 1000)   # ver GestorTransacciones.__init__
 
     # El RMC se CONECTA al GT: el GT tiene la direccion fija y reparte el trabajo
     socket_gt = contexto.socket(zmq.REP)
@@ -101,6 +102,7 @@ def arrancar_cancelaciones():
     directamente a la direccion que el cliente envio en su peticion.
     """
     contexto = zmq.Context()
+    contexto.setsockopt(zmq.CONNECT_TIMEOUT, 1000)   # ver GestorTransacciones.__init__
     entrada = contexto.socket(zmq.PULL)
     entrada.bind(config.direccion_bind(config.GT_PUERTO_CANCELACION))
     persistencia = ClientePersistencia(contexto, timeout_ms=config.TIMEOUT_MS // 3)

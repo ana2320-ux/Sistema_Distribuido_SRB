@@ -21,6 +21,7 @@ class Cliente:
         self.timeout_ms = timeout_ms
         self.direccion = config.direccion(config.HOST_CAPA_SERVICIOS, config.GT_PUERTO_CLIENTES)
         self.contexto = zmq.Context()
+        self.contexto.setsockopt(zmq.CONNECT_TIMEOUT, 1000)   # ver GestorTransacciones.__init__
         self.socket = self._nuevo_socket()
 
         # Notificaciones: llegan a este PULL y las recibe un hilo aparte
