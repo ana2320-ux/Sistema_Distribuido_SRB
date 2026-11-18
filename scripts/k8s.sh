@@ -18,7 +18,9 @@ kubectl() { sudo k3s kubectl "$@"; }
 
 case "${1:-}" in
 servidor)
-    curl -sfL https://get.k3s.io | sh -
+    # Rangos propios para pods y servicios: los de k3s por defecto (10.42/10.43.0.0/16) contienen
+    # la red de la sala (10.43.96.0/20) y le quitarían el tráfico a las máquinas.
+    curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--cluster-cidr=172.30.0.0/16 --service-cidr=172.31.0.0/16" sh -
     sudo cat /var/lib/rancher/k3s/server/node-token > k8s/.token
     echo "Servidor listo. Ahora, en las máquinas 1 y 3: bash scripts/k8s.sh agente"
     ;;
