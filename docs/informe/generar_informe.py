@@ -23,7 +23,7 @@ DIAGRAMAS = AQUI.parent / "diagramas" / "png"
 SALIDA = AQUI / "informe-segunda-entrega.docx"
 
 TITULO = "Informe de pruebas y rendimiento: Sistema distribuido basado en servicios para la reserva de boletos"
-AUTORES = "Ana Murcia Gómez, Martín Sanmiguel Delgado, David Felipe Mannios Romero, Jhon Sebastian Mejia y Alejandro Martínez Mesa"
+AUTORES = "Ana Murcia Gómez, Martín Sanmiguel Delgado y Alejandro Martínez Mesa"
 FUENTE = "Times New Roman"
 
 doc = Document()
