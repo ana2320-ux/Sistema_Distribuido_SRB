@@ -4,7 +4,7 @@
 #   tres corridas de cada uno, y antes de cada escenario se detiene para que la base de datos se
 #   reinicie a mano en la máquina 3. Para hacer todo solo y sobre Kubernetes: scripts/k8s-medir.sh
 # DÓNDE: en la máquina 1 (clientes), con las máquinas 2 y 3 ya levantadas en la arquitectura que
-#   se va a medir (README, secciones 5.1 y 5.2).
+#   se va a medir (README, sección 5.1).
 # USO, desde la carpeta del proyecto:
 #   bash scripts/medir.sh base          # con la arquitectura base levantada
 #   bash scripts/medir.sh escalable     # con la arquitectura escalable levantada

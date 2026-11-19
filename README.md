@@ -48,7 +48,7 @@ Componentes de la arquitectura final:
 | Reintento del cliente | Tolerancia a fallas | Si no hay respuesta, el cliente reenvía la petición una vez, con el mismo `uuid` |
 | Escrituras idempotentes | Tolerancia a fallas | La persistencia guarda cada escritura por el `uuid` de la petición: una petición repetida devuelve el mismo resultado y no se aplica dos veces |
 | Cola de cancelaciones | Tolerancia a fallas | Si el Servicio de Cancelaciones está caído, las cancelaciones aceptadas esperan y se procesan cuando vuelve |
-| Kubernetes (k3s) | Escalabilidad y tolerancia a fallas | Cada servicio es un Deployment con réplicas; las tres máquinas son nodos y `nodeSelector` asigna una capa a cada uno; las probes y el reinicio de contenedores reemplazan el arranque manual (sección 5.4) |
+| Kubernetes (k3s) | Escalabilidad y tolerancia a fallas | Cada servicio es un Deployment con réplicas; las tres máquinas son nodos y `nodeSelector` asigna una capa a cada uno; las probes y el reinicio de contenedores reemplazan el arranque manual (sección 5.2) |
 
 ## 3. Requisitos
 
@@ -104,10 +104,21 @@ Los puertos 5556 y 5557 solo se usan dentro de la máquina 2 y no se abren hacia
 
 ## 5. Ejecución
 
-El orden es máquina 3, máquina 2 y máquina 1. Cada proceso va en su propia terminal y se
-detiene con `Ctrl+C`.
+El sistema se levanta de una de dos formas, nunca las dos a la vez: comparten la base de datos de
+la máquina 3 y la carpeta `resultados/` (sección 11).
 
-### 5.1 Arquitectura base
+| Forma | Qué se levanta | Sección |
+|---|---|---|
+| A mano | Cada servicio como un proceso en su terminal; arquitectura base o escalable | 5.1 |
+| Con Kubernetes | La arquitectura escalable completa con tres comandos | 5.2 |
+
+### 5.1 A mano: un proceso por terminal
+
+El orden es máquina 3, máquina 2 y máquina 1. Cada proceso va en su propia terminal y se
+detiene con `Ctrl+C`. Primero se levanta una de las dos arquitecturas, la base o la escalable, y
+después los clientes.
+
+#### Arquitectura base
 
 ```bash
 # Máquina 3 (10.43.99.246)
@@ -120,7 +131,7 @@ python -m capa_negocios.main rmc                # un RMC
 python -m capa_negocios.main cancelaciones      # Servicio de Cancelaciones
 ```
 
-### 5.2 Arquitectura escalable y tolerante a fallas
+#### Arquitectura escalable y tolerante a fallas
 
 ```bash
 # Máquina 3 (10.43.99.246)
@@ -142,7 +153,7 @@ ocurrencias y el resto con una (70 ocurrencias), 100 asientos cada una. También
 catálogo en JSON (`python -m capa_persistencia.cargar_datos pruebas/ejemplo.json`) y se puede
 ejecutar con los servicios en marcha.
 
-### 5.3 Clientes (máquina 1, 10.43.99.236)
+#### Clientes (máquina 1, 10.43.99.236)
 
 **Caso de prueba desde un archivo de operaciones:**
 
@@ -192,7 +203,11 @@ python -m locust -f capa_cliente/locustfile.py --headless -u 1 -r 1 -t 150s \
 El número de clientes se controla lanzando un proceso por cliente; los escenarios de la Tabla 1
 los lanza `capa_cliente.escenarios` (sección 9).
 
-### 5.4 Despliegue en Kubernetes (k3s)
+### 5.2 Con Kubernetes (k3s)
+
+Esta forma reemplaza a la sección 5.1: no se arranca ningún proceso a mano, y los clientes se
+lanzan desde el pod `clientes` (bloque **Uso**, más abajo). Antes de desplegar se detienen los
+procesos de la sección 5.1 que estén en marcha.
 
 Las tres máquinas forman un clúster de k3s, una capa por nodo. Todo el despliegue son tres
 comandos de `scripts/k8s.sh`, ejecutados desde la carpeta del proyecto (compartida por NFS) con
@@ -268,7 +283,7 @@ el mismo en todas las capas.
 
 ## 7. Tolerancia a fallas
 
-Con la arquitectura de la sección 5.2 en marcha y una carga corriendo (sección 5.3):
+Con la arquitectura escalable de la sección 5.1 en marcha y una carga de clientes corriendo:
 
 | Falla | Cómo se provoca | Qué pasa |
 |---|---|---|
@@ -320,7 +335,7 @@ Cada escenario se corre tres veces, 150 segundos, con 20 peticiones por minuto p
 2. Máquina 1: `bash scripts/medir.sh base`. El script corre los tres escenarios, tres corridas
    de cada uno, y se detiene antes de cada escenario para reiniciar la base de datos en la
    máquina 3 (`python -m capa_persistencia.cargar_datos`).
-3. Máquinas 3 y 2: se detiene todo y se levanta la arquitectura escalable (sección 5.2).
+3. Máquinas 3 y 2: se detiene todo y se levanta la arquitectura escalable (sección 5.1).
 4. Máquina 1: `bash scripts/medir.sh escalable`.
 5. El CSV del Gestor de Transacciones (`resultados/gt_metricas.csv`, en la máquina 2) se copia
    a la máquina 1:
