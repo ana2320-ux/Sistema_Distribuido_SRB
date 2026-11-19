@@ -453,47 +453,33 @@ TEXTOS = {'introduccion': ['En este informe se presentan las pruebas hechas al S
                  'Locust. (s. f.). *Testing other systems/protocols*. '
                  'https://docs.locust.io/en/stable/testing-other-systems.html',
                  'SQLite. (s. f.). *Write-ahead logging*. https://www.sqlite.org/wal.html'],
- 'patrones': ['La resiliencia del sistema se apoya en patrones conocidos de los sistemas distribuidos. La Tabla 4 '
-              'resume cuáles se han usado y dónde; varios son los patrones de petición y respuesta confiable de la '
-              'guía de ZeroMQ (Hintjens, 2013).'],
- 'tabla_patrones': [['Tiempo de espera (timeout)',
-                     'Cada salto espera un tiempo máximo, más corto cuanto más adentro: 5 s el cliente, 2 s el '
-                     'gestor y 1,6 s el RMC',
-                     'Una falla se detecta en vez de bloquear a quien espera'],
-                    ['Reintento con cliente perezoso (Lazy Pirate)',
-                     'El cliente, sin respuesta, cierra el socket REQ, abre uno nuevo y reenvía la petición una vez',
-                     'Supera la caída del gestor y los mensajes perdidos'],
-                    ['Receptor idempotente',
-                     'La persistencia guarda cada escritura por el `uuid` de la petición y devuelve el mismo '
-                     'resultado si llega repetida',
-                     'Los reintentos no duplican reservas ni liberaciones'],
-                    ['Intermediario con reparto de carga (ROUTER/DEALER)',
-                     'El gestor reparte las peticiones entre los RMC conectados y reenvía a otro las que no tuvieron '
-                     'respuesta',
-                     'Escala el RMC y tolera su caída'],
-                    ['Redundancia activa-pasiva (respaldo en espera)',
-                     'Un segundo gestor espera y toma los puertos cuando el activo cae',
-                     'Sustituye al gestor sin intervención'],
-                    ['Réplica de lectura (separación de lecturas y escrituras)',
-                     'Las consultas van a una réplica y las escrituras al servicio principal, que es el único '
-                     'escritor',
-                     'Descarga al escritor y conserva la consistencia'],
-                    ['Degradación controlada',
-                     'Si la réplica de lectura no responde, las consultas pasan al servicio principal',
-                     'El servicio sigue con menos capacidad'],
-                    ['Almacenar y reenviar (cola PUSH/PULL)',
-                     'El gestor acepta la cancelación y ZeroMQ la guarda hasta que el Servicio de Cancelaciones la '
-                     'recibe',
-                     'Ninguna cancelación aceptada se pierde'],
-                    ['Fallar rápido',
-                     'El gestor rechaza de inmediato los mensajes mal formados y la base tiene restricciones `CHECK`',
-                     'Los errores no se propagan ni dejan datos inválidos'],
-                    ['Transacción atómica',
-                     'Verificar el cupo y ocupar los asientos es una sola instrucción dentro de una transacción',
-                     'No hay sobreventa aunque varios clientes reserven a la vez'],
-                    ['Pruebas de salud y autorreparación',
-                     'Kubernetes sondea los puertos (liveness y readiness) y recrea los contenedores o pods caídos',
-                     'Reemplaza procesos sin intervención']],
- 'nota_patrones': 'No se han usado disyuntores (circuit breaker) ni latidos periódicos entre servicios (Paranoid '
-                  'Pirate): con los tiempos de espera, el reenvío y las pruebas de salud de Kubernetes se detectan '
-                  'las mismas fallas.'}
+ 'patrones': ['La Tabla 4 resume los patrones de sistemas distribuidos resilientes que se han usado en el SRB y cómo se aplica cada uno. Varias de las técnicas con que se aplican son los patrones de petición y respuesta confiable de la guía de ZeroMQ (Hintjens, 2013).'],
+ 'tabla_patrones': [['Replicación (Replication)',
+                     'Hay copias de cada servicio de la capa de negocio: un Gestor de Transacciones de respaldo en espera '
+                     '(activo-pasivo), tres RMC que atienden a la vez detrás del intermediario ROUTER/DEALER, que reenvía a '
+                     'otro RMC la petición que no tuvo respuesta en 2 s, y un segundo proceso de persistencia que atiende las '
+                     'consultas. Los datos no se replican: la base SQLite es una sola y la réplica de lectura la abre en modo '
+                     'WAL.'],
+                    ['Compartimentos (Bulkhead)',
+                     'Cada capa corre en su máquina y cada servicio en su propio proceso o contenedor. Las cancelaciones van '
+                     'por un canal propio (PUSH/PULL) a un servicio aparte: si ese servicio cae, ZeroMQ guarda las '
+                     'cancelaciones en una cola acotada y las reservas y consultas siguen; si la cola se llena, solo se '
+                     'rechazan cancelaciones. Lecturas y escrituras van a procesos distintos.'],
+                    ['Dejar que falle (Let It Crash)',
+                     'En Kubernetes, un proceso que se cae no se repara: Kubernetes vuelve a crear el contenedor o el pod, y '
+                     'mientras tanto el gestor de respaldo o los otros RMC atienden. El cliente reintenta una vez con el mismo '
+                     '`uuid` (Lazy Pirate) y la persistencia reconoce la petición repetida (receptor idempotente), así que '
+                     'repetir es seguro.'],
+                    ['Degradación controlada (Graceful Degradation)',
+                     'Si la réplica de lectura no responde, las consultas pasan al servicio principal. Si no hay ningún RMC, el '
+                     'gestor espera 0,5 s y responde NO_DISPONIBLE en vez de dejar esperando al cliente. Si cae el Servicio de '
+                     'Cancelaciones, el gestor sigue aceptando cancelaciones.'],
+                    ['Señales de falla proactivas (Proactive Failure Signals)',
+                     'Los tiempos de espera son más cortos cuanto más adentro (5 s el cliente, 2 s el gestor, 1,6 s el RMC): el '
+                     'RMC alcanza a responder ERROR con el motivo NO_DISPONIBLE antes de que venza la espera del cliente. Los '
+                     'mensajes mal formados se rechazan de inmediato (PETICION_INVALIDA) y la base tiene restricciones `CHECK`. '
+                     'En Kubernetes, la prueba de disponibilidad (readiness) saca de servicio el contenedor que dejó de '
+                     'atender.']],
+ 'nota_patrones': 'Además de estos patrones, la transacción atómica (verificar el cupo y ocupar los asientos en una sola '
+                  'instrucción) y las escrituras idempotentes garantizan que no haya sobreventa ni reservas '
+                  'duplicadas cuando una petición se repite.'}

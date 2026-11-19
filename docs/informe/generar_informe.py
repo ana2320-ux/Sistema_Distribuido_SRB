@@ -331,7 +331,7 @@ titulo2("3.3 Patrones de resiliencia")
 for texto in T["patrones"]:
     parrafo(texto)
 tabla("Patrones de sistemas distribuidos resilientes usados en el SRB",
-      ["Patrón", "Cómo se aplica", "Qué resuelve"], T["tabla_patrones"], [4.6, 7.4, 4.4],
+      ["Patrón", "Cómo se aplica"], T["tabla_patrones"], [4.0, 12.4],
       tamano=9, texto_nota=T["nota_patrones"])
 titulo2("3.4 Clases y modelo de datos")
 parrafo(T["clases"])
