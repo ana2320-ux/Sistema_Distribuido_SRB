@@ -21,9 +21,7 @@ Tolerancia a fallas:
     cliente con el mismo uuid, y la persistencia no repite las que ya se hicieron.
 """
 import time
-
 import zmq
-
 from config import configuracion as config
 from config import E_mensaje as m
 from capa_negocios.metricas import RegistroMetricas

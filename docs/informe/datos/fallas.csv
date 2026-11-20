@@ -1,5 +1,0 @@
-evento,descripcion,peticiones,errores,max_ms,consistencia
-gt,Cae el Gestor de Transacciones activo; entra el de respaldo,235,0,719,Consistente; 34 notificaciones de 34 cancelaciones
-rmc1,Cae uno de los tres RMC,238,0,34,Consistente; 34 notificaciones de 34 cancelaciones
-cancelaciones,Cae el Servicio de Cancelaciones y se arranca de nuevo 10 s después,238,0,30,Consistente; 34 notificaciones de 34 cancelaciones
-lectura,Cae la réplica de lectura,230,0,1678,Consistente; 34 notificaciones de 34 cancelaciones

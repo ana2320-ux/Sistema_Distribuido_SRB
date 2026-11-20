@@ -1,4 +1,0 @@
-evento,descripcion,peticiones,errores,max_ms,consistencia
-gt_activo,Cae el proceso del Gestor de Transacciones activo; toma el control el respaldo del mismo pod,227,0,1008,Consistente; 34 notificaciones de 34 cancelaciones
-rmc_pod,Se borra un pod del RMC; Kubernetes crea otro,231,0,19,Consistente; 34 notificaciones de 34 cancelaciones
-gt_ambos,Caen los dos procesos del pod del Gestor de Transacciones; Kubernetes reinicia los contenedores,222,0,1541,Consistente; 33 notificaciones de 33 cancelaciones

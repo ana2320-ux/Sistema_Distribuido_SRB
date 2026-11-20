@@ -1,7 +1,0 @@
-arquitectura,clientes,operacion,corridas,peticiones,promedio_ms,desviacion_ms,p95_ms,tpm,tasa_error_pct,tpm_medidas_en
-base,8,CONSULTA,2,14336,32.96,7.82,45.57,7128.6,0.0,GT
-base,8,RESERVA,2,7129,32.9,7.8,45.02,3544.9,0.0,GT
-base,8,MODIFICACION,2,7207,33.05,7.5,45.83,3583.7,0.0,GT
-escalable,8,CONSULTA,3,53654,14.77,37.41,27.68,16072.5,0.0,GT
-escalable,8,RESERVA,3,21332,19.16,42.91,30.71,6403.5,0.0,GT
-escalable,8,MODIFICACION,3,21322,19.37,44.41,31.04,6397.9,0.0,GT
