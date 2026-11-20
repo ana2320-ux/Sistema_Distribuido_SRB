@@ -1,0 +1,1731 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulación del SRB</title>
+<meta name="description" content="Simulación interactiva del Sistema Distribuido de Reserva de Boletos: tres capas, ZeroMQ, réplicas y tolerancia a fallas">
+
+<style>
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f0f2f5; --machine: #eef1f5;
+  --text: #1a1e24; --muted: #5b6470; --border: #dce1e7; --accent: #2f5bd3;
+  --ok: #15803d; --warn: #b45309; --err: #dc2626; --ack: #2563eb; --dead: #a2aab4;
+  --c-consulta: #2563eb; --c-reserva: #16a34a; --c-modificacion: #d97706;
+  --c-cancelacion: #dc2626; --c-notificacion: #9333ea;
+  --t-cliente: #0e7490; --t-gt: #2f5bd3; --t-rmc: #7c3aed; --t-canc: #be123c; --t-pers: #0f766e;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 2px 8px rgba(0,0,0,.04);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1115; --surface: #161a20; --surface-2: #1d222a; --machine: #12161c;
+    --text: #e5e8ec; --muted: #98a2ae; --border: #2a3039; --accent: #7c9cff;
+    --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --ack: #60a5fa; --dead: #59616b;
+    --c-consulta: #60a5fa; --c-reserva: #4ade80; --c-modificacion: #fbbf24;
+    --c-cancelacion: #f87171; --c-notificacion: #c084fc;
+    --t-cliente: #22d3ee; --t-gt: #7c9cff; --t-rmc: #a78bfa; --t-canc: #fb7185; --t-pers: #2dd4bf;
+    --shadow: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1115; --surface: #161a20; --surface-2: #1d222a; --machine: #12161c;
+  --text: #e5e8ec; --muted: #98a2ae; --border: #2a3039; --accent: #7c9cff;
+  --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --ack: #60a5fa; --dead: #59616b;
+  --c-consulta: #60a5fa; --c-reserva: #4ade80; --c-modificacion: #fbbf24;
+  --c-cancelacion: #f87171; --c-notificacion: #c084fc;
+  --t-cliente: #22d3ee; --t-gt: #7c9cff; --t-rmc: #a78bfa; --t-canc: #fb7185; --t-pers: #2dd4bf;
+  --shadow: none; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+}
+.mono, code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 20px 16px 48px; }
+header h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+header p { margin: 0; color: var(--muted); max-width: 900px; }
+.autores {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  margin: 8px 0 10px; font-size: 12.5px; color: var(--muted);
+}
+.autores .autor {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 2px 10px; border-radius: 99px; color: var(--text);
+  font-weight: 500; box-shadow: var(--shadow);
+}
+footer {
+  margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--border);
+  text-align: center; font-size: 12px; color: var(--muted);
+}
+.barra {
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+  margin: 16px 0 12px; padding: 10px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+}
+.barra .grupo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.barra .etq { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.reloj { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); }
+.reloj b { color: var(--text); }
+button, select, input {
+  font: inherit; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px;
+}
+input, select { min-width: 0; }
+button { cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primario { background: var(--accent); color: #fff; border-color: var(--accent); }
+:root[data-theme="dark"] button.primario { color: #0e1115; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primario { color: #0e1115; } }
+button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: var(--surface-2); }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .seg button.on, :root:not([data-theme="light"]) button.on { color: #0e1115; } }
+:root[data-theme="dark"] .seg button.on, :root[data-theme="dark"] button.on { color: #0e1115; }
+input[type=range] { padding: 0; accent-color: var(--accent); width: 120px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 12px 14px; min-width: 0;
+}
+.card h2 { font-size: 13px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+.lado { display: grid; gap: 14px; }
+.narrador {
+  min-height: 40px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2);
+  border-left: 3px solid var(--accent); margin-bottom: 8px; font-size: 13.5px;
+}
+.narrador b { color: var(--accent); }
+svg#red { width: 100%; height: auto; display: block; user-select: none; }
+.leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.punto.hueco { background: transparent !important; border: 2.5px solid var(--muted); }
+
+/* SVG */
+.maq rect { fill: var(--machine); stroke: var(--border); stroke-width: 1.2; }
+.maq .t { fill: var(--text); font-size: 13px; font-weight: 600; }
+.maq .ip { fill: var(--muted); font-size: 11px; }
+.link { stroke: var(--border); stroke-width: 2; fill: none; }
+.link.fuerte { stroke: var(--muted); stroke-opacity: .55; }
+.link.tenue { stroke-dasharray: 4 5; stroke-opacity: .8; }
+.link.flash { stroke: var(--accent); stroke-width: 3.5; stroke-opacity: 1; }
+.nodo { cursor: default; }
+.nodo.clic { cursor: pointer; }
+.nodo .caja { fill: var(--surface); stroke: var(--border); stroke-width: 1.5; transition: stroke .2s; }
+.nodo.activo .caja { stroke: var(--accent); stroke-width: 2.5; }
+.nodo.ocupado .caja { stroke: var(--t-rmc); stroke-width: 2.2; }
+.nodo.caido .caja { fill: var(--surface-2); stroke: var(--err); stroke-dasharray: 5 4; }
+.nodo.caido text { fill: var(--dead); }
+.nodo.flash .caja { stroke: var(--accent); stroke-width: 3.5; }
+.nodo .tt { fill: var(--text); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.nodo .st { fill: var(--muted); font-size: 10.5px; text-anchor: middle; }
+.nodo .bd { fill: var(--muted); font-size: 10.5px; text-anchor: middle; }
+.nodo.caido .x { display: block; }
+.nodo .x { display: none; fill: var(--err); font-size: 11px; font-weight: 700; text-anchor: end; }
+.nodo:focus { outline: none; }
+.nodo:focus-visible .caja { stroke: var(--accent); stroke-width: 3; }
+.barra-espera rect.fondo { fill: var(--surface-2); }
+.msg { cursor: pointer; }
+.msg circle { stroke-width: 3; }
+.msg text { font-size: 10px; font-weight: 600; text-anchor: middle; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; stroke-linejoin: round; }
+.perdido { font-size: 16px; font-weight: 800; fill: var(--err); text-anchor: middle; animation: desvanecer 1.4s forwards; }
+.perdido-t { font-size: 10px; font-weight: 600; fill: var(--err); text-anchor: middle; animation: desvanecer 1.4s forwards; }
+@keyframes desvanecer { 0% { opacity: 1; } 70% { opacity: .9; } 100% { opacity: 0; } }
+
+/* formularios */
+.campo { display: grid; gap: 4px; margin-bottom: 8px; }
+.campo label, .mini { font-size: 12px; color: var(--muted); }
+.fila { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.fila > * { flex: 1 1 0; min-width: 0; }
+.fila input, .fila select { width: 100%; }
+.ops { display: grid; grid-template-columns: repeat(4, 1fr); }
+.ops button { padding: 6px 4px; font-size: 12.5px; }
+.lista-btn { display: grid; gap: 6px; }
+.lista-btn button { text-align: left; }
+.fallas { display: grid; gap: 6px; }
+.falla { display: flex; align-items: center; gap: 8px; }
+.falla .nom { flex: 1; min-width: 0; }
+.pill { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
+.pill.vivo { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+.pill.muerto { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+.pill.resp { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.falla button { padding: 3px 9px; font-size: 12.5px; min-width: 78px; }
+.escala { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+.escala .mini { flex: 1; }
+.progreso { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 18px; }
+
+.abajo { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.abajo2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.log {
+  height: 340px; overflow-y: auto; font-size: 12px; line-height: 1.5;
+  background: var(--surface-2); border-radius: 8px; padding: 6px 8px;
+}
+.log .l { white-space: pre-wrap; word-break: break-word; padding: 1px 2px; border-radius: 4px; }
+.log .l.con-msg { cursor: pointer; }
+.log .l.con-msg:hover { background: var(--surface); }
+.log .l.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.log .l.interno { opacity: .72; }
+.log .l.demo { color: var(--accent); font-weight: 600; }
+.log .t { color: var(--muted); }
+.tag { font-weight: 700; }
+.tag.CLIENTE { color: var(--t-cliente); } .tag.GT { color: var(--t-gt); } .tag.RMC { color: var(--t-rmc); }
+.tag.CANCELACIONES { color: var(--t-canc); } .tag.PERSISTENCIA, .tag.REPLICA { color: var(--t-pers); }
+.e-EXITO { color: var(--ok); font-weight: 600; } .e-FALLO { color: var(--warn); font-weight: 600; }
+.e-ERROR { color: var(--err); font-weight: 600; } .e-ACK { color: var(--ack); font-weight: 600; }
+.cab-log { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.cab-log h2 { margin: 0; }
+.cab-log label { font-size: 12px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
+pre.json {
+  margin: 0; height: 340px; overflow: auto; font-size: 12px; background: var(--surface-2);
+  border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; word-break: break-word;
+}
+.ruta { font-size: 12.5px; margin-bottom: 6px; color: var(--muted); min-height: 19px; }
+.ruta b { color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+td.n, th.n { text-align: right; }
+.tabla-scroll { max-height: 260px; overflow: auto; }
+.ocup { display: grid; grid-template-columns: 82px minmax(0,1fr) 54px; gap: 8px; align-items: center; font-size: 12.5px; padding: 2px 0; }
+.ocup .b { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.ocup .b i { display: block; height: 100%; background: var(--c-reserva); border-radius: 4px; transition: width .3s; }
+.ocup .b i.lleno { background: var(--err); }
+.verif { font-size: 12.5px; margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); }
+.vacio { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
+.cancelada td { color: var(--muted); text-decoration: line-through; }
+.explica { margin-top: 14px; }
+.explica-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.explica h3 { font-size: 14px; margin: 0 0 6px; }
+.explica ol, .explica ul { margin: 0; padding-left: 20px; }
+.explica li { margin: 2px 0; }
+.explica p { margin: 0 0 6px; color: var(--muted); }
+.nota { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+@media (max-width: 1020px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .lado { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .abajo, .abajo2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .reloj { margin-left: 0; width: 100%; }
+  .log, pre.json { height: 260px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Simulación del Sistema Distribuido de Reserva de Boletos</h1>
+    <div class="autores" aria-label="Autores del proyecto">
+      <span>Desarrollado por</span>
+      <span class="autor">Ana María Murcia</span>
+      <span class="autor">Martín Sanmiguel</span>
+      <span class="autor">Alejandro Martínez</span>
+    </div>
+    <p>Tres máquinas, ZeroMQ y SQLite. Cada punto que se mueve es un mensaje JSON real del protocolo
+      (<code>config/E_mensaje.py</code>); los puntos huecos son respuestas. Haga clic en un mensaje o en una línea
+      de la bitácora para ver su contenido, y en un componente de la máquina 2 o 3 para detenerlo o arrancarlo.</p>
+  </header>
+
+  <div class="barra">
+    <div class="grupo">
+      <span class="etq">Arquitectura</span>
+      <div class="seg" role="group" aria-label="Arquitectura">
+        <button id="arq-base" type="button">Base</button>
+        <button id="arq-esc" type="button" class="on">Escalable y tolerante</button>
+      </div>
+    </div>
+    <div class="grupo">
+      <span class="etq">Velocidad</span>
+      <input id="vel" type="range" min="0.02" max="1" step="0.01" value="0.1" aria-label="Velocidad de la simulación">
+      <span id="vel-t" class="mono">×0.10</span>
+      <button id="pausa" type="button">Pausar</button>
+    </div>
+    <div class="grupo">
+      <button id="reiniciar" type="button" title="Equivale a cargar_datos y arrancar todos los procesos de nuevo">Reiniciar todo</button>
+      <button id="tema" type="button" title="Cambiar tema">◐</button>
+    </div>
+    <div class="reloj mono"><span id="avance" hidden title="Ningún mensaje viaja por la red: el reloj corre más rápido hasta el próximo suceso">⏩ </span>tiempo simulado <b id="reloj">0.00 s</b></div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <div class="narrador" id="narrador">Envíe una petición desde el panel de la derecha, ejecute el caso básico o pruebe una de las demostraciones de fallas.</div>
+      <svg id="red" viewBox="0 0 1000 600" role="img" aria-label="Topología del sistema en tres máquinas"></svg>
+      <div class="leyenda">
+        <span><i class="punto" style="background:var(--c-consulta)"></i>Consulta</span>
+        <span><i class="punto" style="background:var(--c-reserva)"></i>Reserva</span>
+        <span><i class="punto" style="background:var(--c-modificacion)"></i>Modificación</span>
+        <span><i class="punto" style="background:var(--c-cancelacion)"></i>Cancelación</span>
+        <span><i class="punto" style="background:var(--c-notificacion)"></i>Notificación</span>
+        <span><i class="punto hueco"></i>Respuesta</span>
+        <span><b style="color:var(--err)">✕</b> Mensaje perdido (destino caído)</span>
+      </div>
+    </div>
+
+    <aside class="lado">
+      <section class="card">
+        <h2>Enviar una petición</h2>
+        <div class="fila">
+          <div class="campo">
+            <label for="f-cliente">Cliente (máquina 1)</label>
+            <select id="f-cliente"><option value="1">Cliente 1</option><option value="2">Cliente 2</option><option value="3">Cliente 3</option></select>
+          </div>
+        </div>
+        <div class="seg ops" role="group" aria-label="Operación" id="f-ops">
+          <button type="button" data-op="CONSULTA" class="on">Consulta</button>
+          <button type="button" data-op="RESERVA">Reserva</button>
+          <button type="button" data-op="MODIFICACION">Modificar</button>
+          <button type="button" data-op="CANCELACION">Cancelar</button>
+        </div>
+        <div style="margin-top:10px">
+          <div data-grupo="CONSULTA">
+            <div class="campo"><label for="f-mes">Mes</label>
+              <select id="f-mes"></select></div>
+          </div>
+          <div data-grupo="RESERVA" hidden>
+            <div class="fila">
+              <div class="campo"><label for="f-evento">Evento</label><select id="f-evento"></select></div>
+              <div class="campo"><label for="f-fecha">Fecha</label><input id="f-fecha" list="f-fechas" class="mono"><datalist id="f-fechas"></datalist></div>
+              <div class="campo" style="flex:.6"><label for="f-asientos">Asientos</label><input id="f-asientos" type="number" min="0" value="2"></div>
+            </div>
+          </div>
+          <div data-grupo="MODIFICACION" hidden>
+            <div class="fila">
+              <div class="campo" style="flex:.6"><label for="f-mod-id">Reserva</label><input id="f-mod-id" type="number" min="1" value="1"></div>
+              <div class="campo"><label for="f-mod-tipo">Cambiar</label>
+                <select id="f-mod-tipo"><option value="n">asientos</option><option value="f">fecha</option></select></div>
+              <div class="campo"><label for="f-mod-val">Nuevo valor</label><input id="f-mod-val" class="mono" value="5"></div>
+            </div>
+          </div>
+          <div data-grupo="CANCELACION" hidden>
+            <div class="campo"><label for="f-can-id">Reserva a cancelar</label><input id="f-can-id" type="number" min="1" value="1"></div>
+          </div>
+        </div>
+        <button id="enviar" type="button" class="primario" style="width:100%;margin-top:4px">Enviar</button>
+        <div class="mini" id="f-ayuda" style="margin-top:6px"></div>
+      </section>
+
+      <section class="card">
+        <h2>Escenarios</h2>
+        <div class="lista-btn">
+          <button id="caso" type="button">▶ Caso básico (<span class="mono">pruebas/caso_basico.txt</span>)</button>
+          <button id="carga" type="button">▶ Carga aleatoria de los 3 clientes</button>
+        </div>
+        <div class="progreso" id="progreso"></div>
+        <h2 style="margin-top:12px">Demostraciones de fallas</h2>
+        <div class="lista-btn">
+          <button type="button" data-demo="gt">Cae el GT activo con una reserva en camino</button>
+          <button type="button" data-demo="rmc">Cae un RMC después de guardar la reserva</button>
+          <button type="button" data-demo="canc">Cae el Servicio de Cancelaciones</button>
+          <button type="button" data-demo="replica">Cae la réplica de lectura</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Procesos</h2>
+        <div class="fallas" id="fallas"></div>
+        <div class="escala">
+          <span class="mini" id="escala-t">Réplicas del RMC</span>
+          <button id="rmc-menos" type="button" title="Detener y quitar el último RMC">− RMC</button>
+          <button id="rmc-mas" type="button" title="Arrancar otro RMC (rmc --con-replica)">+ RMC</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="abajo">
+    <section class="card">
+      <div class="cab-log">
+        <h2>Bitácora</h2>
+        <label><input type="checkbox" id="ver-internos" checked> mensajes con la persistencia</label>
+      </div>
+      <div class="log mono" id="log" aria-live="polite"></div>
+    </section>
+    <section class="card">
+      <div class="cab-log"><h2>Inspector de mensajes</h2></div>
+      <div class="ruta" id="ruta">Haga clic en un mensaje en movimiento o en una línea de la bitácora.</div>
+      <pre class="json" id="json">{}</pre>
+    </section>
+  </div>
+
+  <div class="abajo2">
+    <section class="card">
+      <h2>Base de datos (SQLite, máquina 3)</h2>
+      <div id="ocupaciones"></div>
+      <div class="verif" id="verif"></div>
+      <h2 style="margin-top:12px">Reservas</h2>
+      <div class="tabla-scroll"><table id="reservas"></table></div>
+    </section>
+    <section class="card">
+      <h2>Métricas medidas en los clientes</h2>
+      <table id="metricas"></table>
+      <p class="nota">Tiempo de respuesta en tiempo simulado, desde que el cliente envía hasta que recibe la respuesta
+        (incluye los reintentos). Cada salto de red dura unos 50 ms simulados (en la red real, cerca de 1 ms) para que se vea;
+        los tiempos límite son los del sistema: cliente 5 s, GT → RMC 2 s, RMC → persistencia 1,67 s. Mientras ningún
+        mensaje viaja, el reloj avanza más rápido (⏩) para no esperar esos segundos a la velocidad de la animación.</p>
+    </section>
+  </div>
+
+  <section class="card explica">
+    <h2>Cómo funciona</h2>
+    <div class="explica-grid">
+      <div>
+        <h3>Consulta, reserva y modificación (síncronas)</h3>
+        <ol>
+          <li>El cliente (REQ) envía la petición al GT por el puerto 5555 (ROUTER).</li>
+          <li>El GT la pasa por el puerto 5556 (DEALER), que reparte en turno entre los RMC conectados.</li>
+          <li>El RMC le pregunta a la persistencia: la reserva consulta la disponibilidad y luego la agrega;
+            la modificación busca la reserva, consulta el cupo y la modifica.</li>
+          <li>Las lecturas van a la réplica (5559) y las escrituras al principal (5558); ambos usan la misma base en modo WAL.</li>
+          <li>La respuesta vuelve por el mismo camino con el mismo <code>uuid</code>.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Cancelación (asíncrona)</h3>
+        <ol>
+          <li>El GT valida la petición y responde <code>ACK</code> de inmediato.</li>
+          <li>La pasa por PUSH al Servicio de Cancelaciones (PULL, puerto 5557).</li>
+          <li>El servicio pide <code>LIBERAR_RESERVA</code> a la persistencia.</li>
+          <li>Envía la <code>NOTIFICACION</code> por PUSH al puerto 6000 + id del cliente.</li>
+        </ol>
+        <p style="margin-top:6px">Si el servicio está caído, las cancelaciones esperan en la cola del PUSH del GT y se entregan cuando vuelve.</p>
+      </div>
+      <div>
+        <h3>Tolerancia a fallas</h3>
+        <ul>
+          <li><b>GT de respaldo:</b> encuentra los puertos ocupados y revisa cada segundo; cuando el activo cae, los toma.</li>
+          <li><b>Reintento del cliente:</b> a los 5 s sin respuesta reenvía una vez con el mismo <code>uuid</code>.</li>
+          <li><b>Reenvío a otro RMC:</b> a los 2 s sin respuesta el GT reenvía, marcada como reintento.</li>
+          <li><b>Escrituras idempotentes:</b> la persistencia guarda el resultado por <code>uuid</code>; una petición repetida no se aplica dos veces.</li>
+          <li><b>Réplica caída:</b> la consulta se reintenta en el principal y ese RMC deja de usar la réplica.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Sistema Distribuido de Reserva de Boletos (SRB) · Ana María Murcia, Martín Sanmiguel &amp; Alejandro Martínez
+  </footer>
+</div>
+
+<script>
+'use strict';
+/* ====================================================================================
+   Constantes del sistema (.env: TIMEOUT_MS = 5000)
+   ==================================================================================== */
+const TIMEOUT_MS = 5000;
+const T_CLIENTE = TIMEOUT_MS;                 // el cliente espera 5 s y reenvía una vez
+const T_GT_RMC = TIMEOUT_MS * 0.4;            // ESPERA_RMC_S: 2 s
+const T_RMC_PERS = Math.floor(TIMEOUT_MS / 3);// el RMC y Cancelaciones esperan 1,67 s a la persistencia
+const T_SIN_RMC = 500;                        // ESPERA_SIN_RMC_S
+const T_RESPALDO = 1000;                      // el GT de respaldo revisa los puertos cada segundo
+const PROC = { gt: 1, rmc: 3, pers: 6, canc: 3 };
+const VEL_ESPERA = 2;   // si no viaja ningún mensaje, el reloj avanza al menos así de rápido (esperas de 2 y 5 s)
+const IP = { cons: '10.43.99.236', neg: '10.43.100.36', alm: '10.43.99.246' };
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const SINCRONOS = new Set(['CONSULTA', 'RESERVA', 'MODIFICACION']);
+const LECTURAS = new Set(['CONSULTA', 'CONSULTA_DISPONIBILIDAD', 'CONSULTAR_RESERVA']);
+const ESCRITURAS = new Set(['AGREGAR_RESERVA', 'MODIFICAR_RESERVA', 'LIBERAR_RESERVA']);
+const COLOR_OP = { CONSULTA: '--c-consulta', RESERVA: '--c-reserva', MODIFICACION: '--c-modificacion',
+                   CANCELACION: '--c-cancelacion', NOTIFICACION: '--c-notificacion' };
+const CORTO = { CONSULTA_DISPONIBILIDAD: 'CONSULTA_DISP', CONSULTAR_RESERVA: 'CONSULTAR_RES',
+                AGREGAR_RESERVA: 'AGREGAR_RES', MODIFICAR_RESERVA: 'MODIFICAR_RES', LIBERAR_RESERVA: 'LIBERAR_RES',
+                MODIFICACION: 'MODIFICACION', CANCELACION: 'CANCELACION', NOTIFICACION: 'NOTIFICACION' };
+
+/* ====================================================================================
+   Reloj simulado y planificador: todo (viajes, esperas, tiempos límite) usa este reloj,
+   así que pausar o cambiar la velocidad no altera el orden de los sucesos.
+   ==================================================================================== */
+const sim = { ahora: 0, vel: 0.1, pausado: false, timers: [], seq: 0 };
+function despues(ms, fn) {
+  const t = { t: sim.ahora + ms, fn, id: ++sim.seq, vivo: true };
+  sim.timers.push(t);
+  return t;
+}
+function anular(t) { if (t) t.vivo = false; }
+function esperar(ms) { return new Promise(r => despues(ms, r)); }
+
+/* ====================================================================================
+   Mensajes (igual que config/E_mensaje.py)
+   ==================================================================================== */
+function nuevoUuid() {
+  try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+function crearPeticion(tipo, idCliente, datos, uuid) {
+  return { uuid: uuid || nuevoUuid(), tipo, id_cliente: idCliente, datos: datos || {} };
+}
+function crearRespuesta(pet, estado, motivo, datos) {
+  return { uuid: (pet && pet.uuid) || null, estado,
+           motivo: (estado === 'EXITO' || estado === 'ACK') ? null : (motivo || null), datos: datos || {} };
+}
+const clonar = o => JSON.parse(JSON.stringify(o));
+const u8 = u => (u || '').slice(0, 8);
+
+/* ====================================================================================
+   Base de datos (capa_persistencia/db.py): 50 eventos de noviembre de 2026,
+   los primeros 20 con dos ocurrencias, 100 asientos cada una.
+   ==================================================================================== */
+const TIPOS_EVENTO = ['concierto', 'teatro', 'futbol', 'cine', 'danza'];
+function eventosEnunciado() {
+  const ev = [];
+  for (let i = 1; i <= 50; i++) {
+    const dia = (i - 1) % 14 + 1;
+    const fechas = [`2026/11/${String(dia).padStart(2, '0')}`];
+    if (i <= 20) fechas.push(`2026/11/${String(dia + 14).padStart(2, '0')}`);
+    const tipo = TIPOS_EVENTO[(i - 1) % 5];
+    ev.push({ id: `E${i}`, nombre: `${tipo[0].toUpperCase() + tipo.slice(1)} ${i}`, fechas, capacidad: 100 });
+  }
+  return ev;
+}
+const EVENTOS = eventosEnunciado();
+
+class Falla extends Error {
+  constructor(estado, motivo, razon) { super(razon); this.estado = estado; this.motivo = motivo; }
+}
+class BaseDatos {
+  constructor() { this.reiniciar(); }
+  reiniciar() {
+    this.ocurrencias = new Map();
+    this.reservas = new Map();
+    this.operaciones = new Map();   // tabla operacion: uuid -> datos de la respuesta
+    this.sigId = 1;
+    for (const e of EVENTOS) for (const f of e.fechas)
+      this.ocurrencias.set(`${e.id}|${f}`, { id_evento: e.id, nombre: e.nombre, fecha: f, capacidad: 100, ocupados: 0 });
+  }
+  ocurrencia(ev, f) { return this.ocurrencias.get(`${ev}|${f}`); }
+  verificarCupo(oc, delta) {
+    const n = oc.ocupados + delta;
+    if (n < 0 || n > oc.capacidad)
+      throw new Falla('FALLO', 'SIN_CUPO', `hay ${oc.capacidad - oc.ocupados} puestos libres en ${oc.id_evento} el ${oc.fecha}, se pidieron ${delta}`);
+  }
+  reservaActiva(id) {
+    const r = this.reservas.get(id);
+    if (!r || !r.activa) throw new Falla('FALLO', 'NO_EXISTE', `no existe la reserva ${id}`);
+    return r;
+  }
+  datosReserva(r) { return { id_reserva: r.id, id_cliente: r.id_cliente, id_evento: r.id_evento, fecha: r.fecha, n_asientos: r.n_asientos }; }
+  ocupadosTotales() { let s = 0; for (const o of this.ocurrencias.values()) s += o.ocupados; return s; }
+  asientosReservados() { let s = 0; for (const r of this.reservas.values()) if (r.activa) s += r.n_asientos; return s; }
+}
+const db = new BaseDatos();
+
+function leerFecha(t) {
+  if (typeof t !== 'string' || !/^\d{4}\/\d{2}\/\d{2}$/.test(t) || isNaN(Date.parse(t.replace(/\//g, '-'))))
+    throw new Falla('ERROR', 'DATO_INVALIDO', `fecha no valida: ${t} (formato AAAA/MM/DD)`);
+  return t;
+}
+function leerEvento(d) {
+  if (typeof d.id_evento !== 'string' || !d.id_evento) throw new Falla('ERROR', 'DATO_INVALIDO', 'falta id_evento');
+  return d.id_evento;
+}
+function leerEntero(v, nombre) {
+  if (!Number.isInteger(v) || v <= 0) throw new Falla('ERROR', 'DATO_INVALIDO', `${nombre} debe ser un entero mayor que 0: ${v}`);
+  return v;
+}
+
+/** Servicio de Persistencia (servicio_persistencia.py). Devuelve {resp, repetida, escribio}. */
+function atenderPersistencia(nodoId, pet) {
+  const d = pet.datos || {};
+  try {
+    if (nodoId === 'spl' && !LECTURAS.has(pet.tipo))
+      throw new Falla('ERROR', 'PETICION_INVALIDA', 'la replica de lectura solo atiende consultas');
+    if (ESCRITURAS.has(pet.tipo) && db.operaciones.has(pet.uuid))
+      return { resp: crearRespuesta(pet, 'EXITO', null, clonar(db.operaciones.get(pet.uuid))), repetida: true };
+    switch (pet.tipo) {
+      case 'CONSULTA': {
+        const i = MESES.indexOf(d.mes);
+        if (i < 0) throw new Falla('ERROR', 'DATO_INVALIDO', `mes no valido: ${d.mes}`);
+        const mm = String(i + 1).padStart(2, '0');
+        const lista = [...db.ocurrencias.values()].filter(o => o.fecha.slice(5, 7) === mm)
+          .map(o => ({ id_evento: o.id_evento, nombre: o.nombre, fecha: o.fecha, capacidad: o.capacidad,
+                       ocupados: o.ocupados, libres: o.capacidad - o.ocupados }));
+        return { resp: crearRespuesta(pet, 'EXITO', null, { mes: d.mes, eventos: lista }) };
+      }
+      case 'CONSULTA_DISPONIBILIDAD': {
+        const ev = leerEvento(d), f = leerFecha(d.fecha), oc = db.ocurrencia(ev, f);
+        if (!oc) throw new Falla('FALLO', 'NO_EXISTE', `${ev} no tiene ocurrencia el ${f}`);
+        return { resp: crearRespuesta(pet, 'EXITO', null, { id_evento: ev, fecha: f, capacidad: oc.capacidad,
+                 ocupados: oc.ocupados, libres: oc.capacidad - oc.ocupados }) };
+      }
+      case 'AGREGAR_RESERVA': {
+        const ev = leerEvento(d), f = leerFecha(d.fecha), n = leerEntero(d.n_asientos, 'n_asientos');
+        const oc = db.ocurrencia(ev, f);
+        if (!oc) throw new Falla('FALLO', 'NO_EXISTE', `${ev} no tiene ocurrencia el ${f}`);
+        db.verificarCupo(oc, n);
+        oc.ocupados += n;
+        const r = { id: db.sigId++, id_cliente: pet.id_cliente, id_evento: ev, fecha: f, n_asientos: n, activa: true };
+        db.reservas.set(r.id, r);
+        const datos = db.datosReserva(r);
+        db.operaciones.set(pet.uuid, clonar(datos));
+        return { resp: crearRespuesta(pet, 'EXITO', null, datos), escribio: true };
+      }
+      case 'CONSULTAR_RESERVA': {
+        const r = db.reservaActiva(leerEntero(d.id_reserva, 'id_reserva'));
+        return { resp: crearRespuesta(pet, 'EXITO', null, db.datosReserva(r)) };
+      }
+      case 'MODIFICAR_RESERVA': {
+        const r = db.reservaActiva(leerEntero(d.id_reserva, 'id_reserva'));
+        const origen = db.ocurrencia(r.id_evento, r.fecha);
+        if ('fecha' in d) {
+          const f = leerFecha(d.fecha), destino = db.ocurrencia(r.id_evento, f);
+          if (!destino) throw new Falla('FALLO', 'NO_EXISTE', `${r.id_evento} no tiene ocurrencia el ${f}`);
+          if (destino !== origen) {            // liberar en la fecha actual y ocupar en la nueva, todo o nada
+            db.verificarCupo(destino, r.n_asientos);
+            origen.ocupados -= r.n_asientos; destino.ocupados += r.n_asientos; r.fecha = f;
+          }
+        } else {
+          const n = leerEntero(d.n_asientos, 'n_asientos');
+          db.verificarCupo(origen, n - r.n_asientos);
+          origen.ocupados += n - r.n_asientos; r.n_asientos = n;
+        }
+        const datos = db.datosReserva(r);
+        db.operaciones.set(pet.uuid, clonar(datos));
+        return { resp: crearRespuesta(pet, 'EXITO', null, datos), escribio: true };
+      }
+      case 'LIBERAR_RESERVA': {
+        const r = db.reservaActiva(leerEntero(d.id_reserva, 'id_reserva'));
+        db.ocurrencia(r.id_evento, r.fecha).ocupados -= r.n_asientos;
+        r.activa = false;
+        const datos = db.datosReserva(r);
+        db.operaciones.set(pet.uuid, clonar(datos));
+        return { resp: crearRespuesta(pet, 'EXITO', null, datos), escribio: true };
+      }
+      default:
+        throw new Falla('ERROR', 'PETICION_INVALIDA', `tipo no atendido: ${pet.tipo}`);
+    }
+  } catch (e) {
+    if (e instanceof Falla) return { resp: crearRespuesta(pet, e.estado, e.motivo, { razon: e.message }) };
+    throw e;
+  }
+}
+
+/* ====================================================================================
+   Componentes (nodos) y estado general
+   ==================================================================================== */
+let nodos = {};
+let est = {};
+
+function nodo(id, props) {
+  return Object.assign({ id, vivo: true, epoca: 0, visible: true, cola: [], ocupado: false, w: 170, h: 58 }, props);
+}
+function nombreNodo(id) {
+  const n = nodos[id];
+  if (!n) return id;
+  if (n.tipo === 'gt') return id === est.gtActivo ? 'GT activo' : (n.vivo ? 'GT de respaldo' : 'GT');
+  return n.titulo;
+}
+
+function iniciarEstado(arq) {
+  const esc = arq === 'escalable';
+  nodos = {
+    c1: nodo('c1', { tipo: 'cliente', titulo: 'Cliente 1', sub: 'REQ · notif. PULL :6001', x: 125, y: 170 }),
+    c2: nodo('c2', { tipo: 'cliente', titulo: 'Cliente 2', sub: 'REQ · notif. PULL :6002', x: 125, y: 315 }),
+    c3: nodo('c3', { tipo: 'cliente', titulo: 'Cliente 3', sub: 'REQ · notif. PULL :6003', x: 125, y: 460 }),
+    gtA: nodo('gtA', { tipo: 'gt', titulo: 'GT', sub: 'ROUTER 5555 · DEALER 5556', x: 355, y: 150, pend: new Map(), colaPush: [] }),
+    gtB: nodo('gtB', { tipo: 'gt', titulo: 'GT', sub: 'ROUTER 5555 · DEALER 5556', x: 355, y: 300, pend: new Map(), colaPush: [], visible: esc }),
+    canc: nodo('canc', { tipo: 'canc', titulo: 'Cancelaciones', sub: 'PULL :5557', x: 645, y: 530, w: 160 }),
+    sp: nodo('sp', { tipo: 'pers', titulo: 'Persistencia', sub: 'REP :5558 · escrituras', x: 870, y: 150, w: 180 }),
+    db: nodo('db', { tipo: 'db', titulo: 'SQLite (WAL)', sub: '/var/tmp/srb/srb.db', x: 870, y: 335, w: 180, h: 70 }),
+    spl: nodo('spl', { tipo: 'pers', titulo: 'Réplica de lectura', sub: 'REP :5559 · consultas', x: 870, y: 520, w: 180, visible: esc }),
+  };
+  if (!esc) nodos.gtB.vivo = false;
+  if (!esc) nodos.spl.vivo = false;
+  est = {
+    gen: (est.gen || 0) + 1,
+    arq, gtActivo: 'gtA', gtUltimo: 'gtA', rr: 0, rmcs: [], sigRmc: 1,
+    clientes: {}, metricas: {}, carga: false, caso: false, demo: false,
+  };
+  for (let i = 1; i <= 3; i++) est.clientes[i] = { id: i, cola: [], actual: null, propias: [] };
+  for (let i = 0; i < (esc ? 3 : 1); i++) agregarRmc(true);
+  db.reiniciar();
+  sim.timers = []; sim.ahora = 0;
+  enVuelo.length = 0;
+  vigilarRespaldo();
+}
+
+function agregarRmc(silencioso) {
+  const id = `rmc${est.sigRmc++}`;
+  const num = id.slice(3);
+  nodos[id] = nodo(id, { tipo: 'rmc', titulo: `RMC ${num}`, sub: '', x: 640, y: 0, w: 140,
+                         lecturas: est.arq === 'escalable' ? 'spl' : 'sp' });
+  est.rmcs.push(id);
+  if (!silencioso) log('RMC', `RMC ${num} conectado al GT en tcp://${IP.neg}:5556; escrituras en :5558, consultas en ${nodos[id].lecturas === 'spl' ? ':5559' : ':5558'}`);
+}
+
+function layoutRmc() {
+  const n = est.rmcs.length, top = 85, bottom = 405, esp = (bottom - top) / Math.max(n, 1);
+  est.rmcs.forEach((id, i) => {
+    const r = nodos[id];
+    r.y = top + esp * (i + 0.5);
+    r.h = Math.min(58, esp - 12);
+  });
+}
+
+/* ====================================================================================
+   Red: los mensajes viajan por el reloj simulado. Si el destino está caído (o es un
+   proceso nuevo que no tiene el socket que esperaba la respuesta) el mensaje se pierde.
+   ==================================================================================== */
+const enVuelo = [];
+const ganchos = [];   // demostraciones: funciones (v) => true si ya actuaron
+
+function duracionSalto(a, b) {
+  const A = nodos[a], B = nodos[b];
+  const d = Math.hypot(A.x - B.x, A.y - B.y);
+  return 28 + d * 0.08;     // ~50 ms simulados por salto: lento para verlo, corto frente a los tiempos límite
+}
+
+function enviarMsg(de, a, msg, op, alLlegar, epocaDestino) {
+  // respuesta: lleva estado y no es una notificación (las notificaciones se dibujan llenas)
+  const v = { de, a, msg, op, t0: sim.ahora, dur: duracionSalto(de, a), resp: 'estado' in msg && msg.tipo !== 'NOTIFICACION' };
+  v.etiqueta = v.resp ? (msg.estado + (msg.motivo ? ' ' + msg.motivo : '')) : ((CORTO[msg.tipo] || msg.tipo) + (msg.reintento ? ' ↻' : ''));
+  v.g = crearPuntoSvg(v);
+  enVuelo.push(v);
+  despues(v.dur, () => {
+    const i = enVuelo.indexOf(v); if (i >= 0) enVuelo.splice(i, 1);
+    if (v.g) v.g.remove();
+    for (let k = ganchos.length - 1; k >= 0; k--) if (ganchos[k](v)) ganchos.splice(k, 1);
+    const n = nodos[a];
+    if (!n || !n.vivo || (epocaDestino !== undefined && epocaDestino !== null && n.epoca !== epocaDestino)) {
+      marcarPerdido(a);
+      return;
+    }
+    alLlegar();
+  });
+  return v;
+}
+
+/* ====================================================================================
+   Cliente (capa_cliente/cliente.py): REQ, una petición a la vez, reintento con el mismo uuid
+   ==================================================================================== */
+function clientePedir(idc, tipo, datos) {
+  return new Promise(resolve => {
+    est.clientes[idc].cola.push({ tipo, datos, resolve });
+    clienteSiguiente(idc);
+  });
+}
+function clienteSiguiente(idc) {
+  const c = est.clientes[idc];
+  if (c.actual || !c.cola.length) return;
+  const op = c.cola.shift();
+  const datos = Object.assign({}, op.datos);
+  if (op.tipo === 'CANCELACION') datos.notificar_a = `tcp://${IP.cons}:${6000 + idc}`;
+  const pet = crearPeticion(op.tipo, idc, datos);
+  c.actual = { pet, op, inicio: sim.ahora, intento: 1 };
+  log('CLIENTE', `cliente ${idc} -> ${describir(pet)}`, pet, false, idc);
+  clienteMandar(idc);
+}
+function clienteMandar(idc) {
+  const c = est.clientes[idc], a = c.actual;
+  const destino = est.gtActivo || est.gtUltimo;
+  const m = a.intento > 1 ? Object.assign({}, a.pet, { reintento: true }) : a.pet;
+  a.plazoIni = sim.ahora;
+  enviarMsg('c' + idc, destino, m, a.pet.tipo, () => gtRecibe(destino, m, idc));
+  a.timer = despues(T_CLIENTE, () => clienteSinRespuesta(idc, a));
+}
+function clienteSinRespuesta(idc, a) {
+  const c = est.clientes[idc];
+  if (c.actual !== a) return;
+  if (a.intento === 1) {
+    a.intento = 2;
+    log('CLIENTE', `cliente ${idc}: sin respuesta en 5 s; reenvia ${a.pet.tipo} con el mismo uuid ${u8(a.pet.uuid)} (reintento)`, a.pet, false, idc);
+    narrar(`El <b>cliente ${idc}</b> no recibió respuesta en 5 s: reenvía la petición <b>con el mismo uuid</b>.`);
+    clienteMandar(idc);
+  } else {
+    clienteTermina(idc, crearRespuesta(a.pet, 'ERROR', 'NO_DISPONIBLE', { razon: 'el GT no respondio' }));
+  }
+}
+function clienteRespuesta(idc, resp) {
+  const c = est.clientes[idc], a = c.actual;
+  if (!a || a.pet.uuid !== resp.uuid) {
+    log('CLIENTE', `cliente ${idc}: respuesta tardia de ${u8(resp.uuid)} descartada (el socket ya se cerro)`, resp, true, idc);
+    return;
+  }
+  clienteTermina(idc, resp);
+}
+function clienteTermina(idc, resp) {
+  const c = est.clientes[idc], a = c.actual;
+  anular(a.timer);
+  c.actual = null;
+  const ms = sim.ahora - a.inicio;
+  registrarMetrica(a.pet.tipo, resp.estado, ms);
+  const extra = resp.estado === 'EXITO' && a.pet.tipo === 'RESERVA' ? ` (reserva ${resp.datos.id_reserva})` :
+                resp.estado === 'EXITO' && a.pet.tipo === 'CONSULTA' ? ` (${resp.datos.eventos.length} ocurrencias)` :
+                resp.estado === 'EXITO' && a.pet.tipo === 'MODIFICACION' ? ` (${resp.datos.id_evento} ${resp.datos.fecha} x${resp.datos.n_asientos})` :
+                resp.datos && resp.datos.razon ? `: ${resp.datos.razon}` : '';
+  log('CLIENTE', `cliente ${idc} <- ${a.pet.tipo} ${estadoHtml(resp)}${extra} · ${ms.toFixed(0)} ms`, resp, false, idc);
+  if (a.pet.tipo === 'RESERVA' && resp.estado === 'EXITO' && !c.propias.includes(resp.datos.id_reserva)) c.propias.push(resp.datos.id_reserva);
+  a.op.resolve(resp);
+  actualizarAyuda();
+  clienteSiguiente(idc);
+}
+function clienteNotificacion(idc, notif) {
+  const c = est.clientes[idc];
+  const id = notif.datos && notif.datos.id_reserva;
+  if (notif.estado === 'EXITO') c.propias = c.propias.filter(x => x !== id);
+  log('CLIENTE', `cliente ${idc} <- NOTIFICACION de la cancelacion ${u8(notif.uuid)}: ${estadoHtml(notif)}` +
+      (notif.estado === 'EXITO' ? ` (reserva ${id} liberada, ${notif.datos.n_asientos} asientos)` : `: ${notif.datos.razon || ''}`), notif, false, idc);
+  actualizarAyuda();
+}
+
+/* ====================================================================================
+   Gestor de Transacciones (capa_negocios/gestor_transacciones.py)
+   ==================================================================================== */
+function revisarPeticion(p) {
+  if (typeof p.uuid !== 'string' || !p.uuid) return 'falta el uuid';
+  if (!Number.isInteger(p.id_cliente) || p.id_cliente <= 0) return `id_cliente debe ser un entero mayor que 0: ${p.id_cliente}`;
+  if (typeof p.datos !== 'object' || p.datos === null || Array.isArray(p.datos)) return 'datos debe ser un objeto';
+  return null;
+}
+function gtRecibe(gtId, pet, idc) {
+  const gt = nodos[gtId];
+  if (est.gtActivo !== gtId) { marcarPerdido(gtId); return; }
+  const ep = gt.epoca;
+  const problema = revisarPeticion(pet);
+  if (problema) {
+    gtResponder(gtId, idc, crearRespuesta(pet, 'ERROR', 'PETICION_INVALIDA', { razon: problema }), pet.tipo);
+    log('GT', `rechazada ${pet.tipo} del cliente ${idc}: ${problema}`, pet);
+    return;
+  }
+  if (pet.tipo === 'CANCELACION') { gtCancelacion(gtId, pet, idc); return; }
+  if (!SINCRONOS.has(pet.tipo)) {
+    gtResponder(gtId, idc, crearRespuesta(pet, 'ERROR', 'PETICION_INVALIDA', { razon: `el GT no acepta peticiones ${pet.tipo}` }), pet.tipo);
+    return;
+  }
+  // Si es un reintento del cliente, reemplaza al pendiente anterior (se responde a la identidad más reciente)
+  const p = { idc, pet, inicio: sim.ahora, envios: 1 };
+  gt.pend.set(pet.uuid, p);
+  log('GT', `<- ${pet.tipo} del cliente ${idc}${pet.reintento ? ' (reintento del cliente)' : ''}`, pet);
+  despues(PROC.gt, () => {
+    if (gt.epoca !== ep || gt.pend.get(pet.uuid) !== p) return;
+    if (gtEnviarRmc(gtId, pet)) programarRevision(gtId, ep, p, T_GT_RMC);
+    else { p.envios = 0; programarRevision(gtId, ep, p, T_SIN_RMC); }
+  });
+}
+function gtEnviarRmc(gtId, pet) {
+  const vivos = est.rmcs.filter(r => nodos[r].vivo);
+  if (!vivos.length) return false;
+  const r = vivos[est.rr++ % vivos.length];            // el DEALER reparte en turno
+  const gtEp = nodos[gtId].epoca;
+  enviarMsg(gtId, r, pet, pet.tipo, () => rmcRecibe(r, pet, gtId, gtEp));
+  return true;
+}
+function programarRevision(gtId, ep, p, ms) {
+  const envios = p.envios;
+  despues(ms, () => gtRevisar(gtId, ep, p, envios));
+}
+function gtRevisar(gtId, ep, p, envios) {
+  const gt = nodos[gtId], pet = p.pet;
+  if (gt.epoca !== ep || gt.pend.get(pet.uuid) !== p || p.envios !== envios) return;
+  if (p.envios === 0) {
+    if (gtEnviarRmc(gtId, pet)) { p.envios = 1; programarRevision(gtId, ep, p, T_GT_RMC); return; }
+    gt.pend.delete(pet.uuid);
+    gtResponder(gtId, p.idc, crearRespuesta(pet, 'ERROR', 'NO_DISPONIBLE', { razon: 'no hay ningun RMC conectado' }), pet.tipo);
+    log('GT', `rechazada ${pet.tipo} del cliente ${p.idc}: no hay RMC conectado`, pet);
+    return;
+  }
+  if (p.envios < 2) {
+    const re = Object.assign({}, pet, { reintento: true });
+    if (gtEnviarRmc(gtId, re)) {
+      p.envios++;
+      log('GT', `sin respuesta del RMC para ${pet.tipo} del cliente ${p.idc}; se reenvia a otro RMC`, re);
+      narrar(`El <b>GT</b> no recibió respuesta del RMC en 2 s: <b>reenvía a otro RMC</b> la misma petición marcada como reintento.`);
+      programarRevision(gtId, ep, p, T_GT_RMC);
+      return;
+    }
+  }
+  gt.pend.delete(pet.uuid);
+  gtResponder(gtId, p.idc, crearRespuesta(pet, 'ERROR', 'NO_DISPONIBLE', { razon: 'ningun RMC respondio' }), pet.tipo);
+  log('GT', `sin respuesta del RMC para ${pet.tipo} del cliente ${p.idc}; se avisa al cliente`, pet);
+}
+function gtRespuestaRmc(gtId, resp) {
+  const gt = nodos[gtId];
+  const p = gt.pend.get(resp.uuid);
+  if (!p) {
+    log('GT', `respuesta repetida o tardia de ${u8(resp.uuid)}: ya se respondio, se descarta`, resp, true);
+    return;
+  }
+  gt.pend.delete(resp.uuid);
+  const ms = sim.ahora - p.inicio;
+  log('GT', `-> ${p.pet.tipo} al cliente ${p.idc}: ${estadoHtml(resp)} (${ms.toFixed(1)} ms)`, resp);
+  gtResponder(gtId, p.idc, resp, p.pet.tipo);
+}
+function gtResponder(gtId, idc, resp, op) {
+  enviarMsg(gtId, 'c' + idc, resp, op, () => clienteRespuesta(idc, resp));
+}
+function gtCancelacion(gtId, pet, idc) {
+  const gt = nodos[gtId], d = pet.datos;
+  if (!Number.isInteger(d.id_reserva) || d.id_reserva <= 0 || typeof d.notificar_a !== 'string' || !d.notificar_a.startsWith('tcp://')) {
+    gtResponder(gtId, idc, crearRespuesta(pet, 'ERROR', 'DATO_INVALIDO',
+      { razon: 'la cancelacion necesita id_reserva (entero) y notificar_a (tcp://host:puerto)' }), 'CANCELACION');
+    log('GT', `rechazada CANCELACION del cliente ${idc}: datos invalidos`, pet);
+    return;
+  }
+  gt.colaPush.push(pet);
+  gtResponder(gtId, idc, crearRespuesta(pet, 'ACK'), 'CANCELACION');
+  log('GT', `<- CANCELACION de la reserva ${d.id_reserva} del cliente ${idc}: ACK, enviada a Cancelaciones`, pet);
+  gtVaciarPush(gtId);
+}
+function gtVaciarPush(gtId) {
+  const gt = nodos[gtId];
+  if (!gt || !gt.vivo || est.gtActivo !== gtId || !gt.colaPush.length) return;
+  if (!nodos.canc.vivo) {
+    log('GT', `Cancelaciones no esta conectado: ${gt.colaPush.length} cancelacion(es) esperan en la cola del PUSH`);
+    return;
+  }
+  while (gt.colaPush.length) {
+    const pet = gt.colaPush.shift();
+    enviarMsg(gtId, 'canc', pet, 'CANCELACION', () => cancRecibe(pet));
+  }
+}
+function vigilarRespaldo() {
+  const gen = est.gen;
+  despues(T_RESPALDO, () => {
+    if (gen !== est.gen) return;
+    if (!est.gtActivo) {
+      const candidato = ['gtA', 'gtB'].find(id => nodos[id].vivo && nodos[id].visible);
+      if (candidato) {
+        est.gtActivo = candidato;
+        est.gtUltimo = candidato;
+        log('GT', 'el GT activo se cayo; este GT toma el control (bind en :5555 y :5556)');
+        narrar('El <b>GT de respaldo</b> encontró los puertos libres y <b>toma el control</b>. Los RMC y los clientes se reconectan solos.');
+        dibujarLinks();
+        actualizarFallas();
+        // los RMC se reconectan al nuevo GT; las cancelaciones de la cola anterior se perdieron con el proceso
+      }
+    }
+    vigilarRespaldo();
+  });
+}
+
+/* ====================================================================================
+   RMC (capa_negocios/rmc.py)
+   ==================================================================================== */
+function rmcRecibe(r, pet, gtId, gtEp) {
+  nodos[r].cola.push({ pet, gtId, gtEp });
+  rmcProcesar(r);
+}
+async function rmcProcesar(r) {
+  const n = nodos[r];
+  if (n.ocupado) return;
+  n.ocupado = true;
+  const ep = n.epoca;
+  while (n.cola.length) {
+    const { pet, gtId, gtEp } = n.cola.shift();
+    await esperar(PROC.rmc);
+    if (n.epoca !== ep) return;
+    let resp;
+    try { resp = await rmcAtender(r, ep, pet); }
+    catch (e) { resp = crearRespuesta(pet, 'ERROR', 'NO_DISPONIBLE', { razon: e.message }); }
+    if (n.epoca !== ep) return;
+    log('RMC', `${n.titulo}: ${pet.tipo}${pet.reintento ? ' (reintento)' : ''} ${resumenDatos(pet.datos)} => ${estadoHtml(resp)}`, resp);
+    enviarMsg(r, gtId, resp, pet.tipo, () => gtRespuestaRmc(gtId, resp), gtEp);
+  }
+  n.ocupado = false;
+}
+async function rmcAtender(r, ep, pet) {
+  const d = pet.datos || {};
+  const pedir = (tipo, datos) => persistencia(r, ep, crearPeticion(tipo, pet.id_cliente, datos, pet.uuid), pet.tipo);
+  const asientosMal = n => !(Number.isInteger(n) && n > 0)
+    ? crearRespuesta(pet, 'ERROR', 'DATO_INVALIDO', { razon: `n_asientos debe ser un entero mayor que 0: ${n}` }) : null;
+
+  if (pet.tipo === 'CONSULTA') return persistencia(r, ep, pet, 'CONSULTA');
+
+  if (pet.tipo === 'RESERVA') {
+    const error = asientosMal(d.n_asientos);
+    if (error) return error;
+    if (!pet.reintento) {
+      const disp = await pedir('CONSULTA_DISPONIBILIDAD', { id_evento: d.id_evento, fecha: d.fecha });
+      if (disp.estado !== 'EXITO') return disp;
+      if (disp.datos.libres < d.n_asientos)
+        return crearRespuesta(pet, 'FALLO', 'SIN_CUPO', { razon: `hay ${disp.datos.libres} puestos libres, se pidieron ${d.n_asientos}` });
+    }
+    return pedir('AGREGAR_RESERVA', d);
+  }
+
+  if (pet.tipo === 'MODIFICACION') {
+    const cambiaFecha = 'fecha' in d;
+    if (!cambiaFecha) { const error = asientosMal(d.n_asientos); if (error) return error; }
+    if (!pet.reintento) {
+      const reserva = await pedir('CONSULTAR_RESERVA', { id_reserva: d.id_reserva });
+      if (reserva.estado !== 'EXITO') return reserva;
+      const actual = reserva.datos;
+      const fecha = cambiaFecha ? d.fecha : actual.fecha;
+      const faltan = cambiaFecha ? actual.n_asientos : d.n_asientos - actual.n_asientos;
+      if (faltan > 0) {
+        const disp = await pedir('CONSULTA_DISPONIBILIDAD', { id_evento: actual.id_evento, fecha });
+        if (disp.estado !== 'EXITO') return disp;
+        if (disp.datos.libres < faltan)
+          return crearRespuesta(pet, 'FALLO', 'SIN_CUPO', { razon: `hay ${disp.datos.libres} puestos libres, se necesitan ${faltan}` });
+      }
+    }
+    return pedir('MODIFICAR_RESERVA', d);
+  }
+  return crearRespuesta(pet, 'ERROR', 'PETICION_INVALIDA', { razon: `tipo no atendido: ${pet.tipo}` });
+}
+
+/* ====================================================================================
+   Cliente de la persistencia (cliente_persistencia.py): REQ con tiempo límite y un
+   reintento; si la réplica no responde, la consulta y las siguientes van al principal.
+   ==================================================================================== */
+function persistencia(origenId, ep, pet, op) {
+  return new Promise((resolve, reject) => {
+    const o = nodos[origenId];
+    let dest = LECTURAS.has(pet.tipo) ? (o.lecturas || 'sp') : 'sp';
+    let intento = 0;
+    const probar = () => {
+      intento++;
+      const estado = { listo: false };
+      const d = dest;
+      enviarMsg(origenId, d, pet, op, () => {
+        const dEp = nodos[d].epoca;
+        despues(PROC.pers, () => {
+          const nd = nodos[d];
+          if (!nd.vivo || nd.epoca !== dEp) return;
+          const { resp, repetida, escribio } = atenderPersistencia(d, pet);
+          const quien = d === 'spl' ? 'REPLICA' : 'PERSISTENCIA';
+          if (repetida) {
+            log(quien, `${pet.tipo} repetida (uuid ${u8(pet.uuid)} ya aplicado): devuelve el resultado guardado, no escribe otra vez`, resp);
+            narrar(`La <b>persistencia</b> reconoce el uuid: la escritura <b>ya se había hecho</b> y devuelve el mismo resultado sin repetirla.`);
+          } else {
+            log(quien, `${pet.tipo} ${resumenDatos(pet.datos)} => ${estadoHtml(resp)}`, resp, true);
+          }
+          destellar('db', d);
+          if (escribio) renderBD();
+          enviarMsg(d, origenId, resp, op, () => {
+            if (estado.listo) return;
+            estado.listo = true; anular(to); resolve(resp);
+          }, ep);
+        });
+      });
+      const to = despues(T_RMC_PERS, () => {
+        if (estado.listo || o.epoca !== ep) return;
+        estado.listo = true;
+        if (d === 'spl') {
+          log(o.tipo === 'rmc' ? 'RMC' : 'CANCELACIONES', `${o.titulo}: la replica de lectura no respondio; la consulta y las siguientes van al principal (:5558)`);
+          narrar(`<b>${o.titulo}</b> no obtuvo respuesta de la réplica: reintenta la consulta en el <b>servicio principal</b>.`);
+        }
+        o.lecturas = 'sp';
+        dest = 'sp';
+        if (intento < 2) probar();
+        else reject(new Error(`la persistencia no respondio (tcp://${IP.alm}:5558)`));
+      });
+    };
+    probar();
+  });
+}
+
+/* ====================================================================================
+   Servicio de Cancelaciones y Notificaciones
+   ==================================================================================== */
+function cancRecibe(pet) {
+  nodos.canc.cola.push(pet);
+  cancProcesar();
+}
+async function cancProcesar() {
+  const n = nodos.canc;
+  if (n.ocupado) return;
+  n.ocupado = true;
+  const ep = n.epoca;
+  while (n.cola.length) {
+    const pet = n.cola.shift();
+    await esperar(PROC.canc);
+    if (n.epoca !== ep) return;
+    const liberar = crearPeticion('LIBERAR_RESERVA', pet.id_cliente, { id_reserva: pet.datos.id_reserva }, pet.uuid);
+    let resp;
+    try { resp = await persistencia('canc', ep, liberar, 'CANCELACION'); }
+    catch (e) { resp = crearRespuesta(pet, 'ERROR', 'NO_DISPONIBLE', { razon: e.message }); }
+    if (n.epoca !== ep) return;
+    const destino = pet.datos.notificar_a;
+    log('CANCELACIONES', `reserva ${pet.datos.id_reserva} del cliente ${pet.id_cliente} => ${estadoHtml(resp)}; notificacion a ${destino}`, resp);
+    const notif = Object.assign({}, resp, { tipo: 'NOTIFICACION' });
+    const idc = pet.id_cliente;
+    enviarMsg('canc', 'c' + idc, notif, 'NOTIFICACION', () => clienteNotificacion(idc, notif));
+  }
+  n.ocupado = false;
+}
+
+/* ====================================================================================
+   Detener y arrancar procesos
+   ==================================================================================== */
+function matar(id, motivo) {
+  const n = nodos[id];
+  if (!n || !n.vivo) return;
+  n.vivo = false; n.epoca++; n.ocupado = false;
+  const perdidas = n.cola.length; n.cola = [];
+  if (n.tipo === 'gt') {
+    const pend = n.pend.size, push = n.colaPush.length;
+    n.pend = new Map(); n.colaPush = [];
+    if (est.gtActivo === id) { est.gtActivo = null; est.gtUltimo = id; }
+    log('GT', `detenido${motivo ? ' (' + motivo + ')' : ''}${pend ? `; ${pend} peticion(es) en curso quedan sin respuesta` : ''}${push ? `; se pierden ${push} cancelacion(es) de la cola` : ''}`);
+  } else {
+    const tag = { rmc: 'RMC', canc: 'CANCELACIONES', pers: id === 'spl' ? 'REPLICA' : 'PERSISTENCIA' }[n.tipo];
+    log(tag, `${n.titulo}: detenido${perdidas ? `; ${perdidas} mensaje(s) en su cola se pierden` : ''}`);
+  }
+  dibujarLinks(); actualizarFallas();
+}
+function arrancar(id) {
+  const n = nodos[id];
+  if (!n || n.vivo) return;
+  n.vivo = true; n.epoca++; n.ocupado = false; n.cola = [];
+  if (n.tipo === 'gt') {
+    if (!est.gtActivo) { est.gtActivo = id; est.gtUltimo = id; log('GT', `clientes en el puerto 5555, RMC en el puerto 5556`); }
+    else log('GT', 'hay otro GT activo; en espera como respaldo');
+  } else if (n.tipo === 'rmc') {
+    n.lecturas = est.arq === 'escalable' ? 'spl' : 'sp';
+    log('RMC', `${n.titulo}: conectado al GT; consultas en ${n.lecturas === 'spl' ? 'la replica (:5559)' : 'el principal (:5558)'}`);
+  } else if (n.tipo === 'canc') {
+    log('CANCELACIONES', 'esperando cancelaciones en el puerto 5557');
+    gtVaciarPush(est.gtActivo);
+  } else {
+    log(id === 'spl' ? 'REPLICA' : 'PERSISTENCIA', `${n.titulo}: escuchando en ${id === 'spl' ? ':5559' : ':5558'}`);
+  }
+  dibujarLinks(); actualizarFallas();
+}
+function alternar(id) { nodos[id].vivo ? matar(id) : arrancar(id); }
+
+/* ====================================================================================
+   Dibujo (SVG)
+   ==================================================================================== */
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('red');
+let capaLinks, capaNodos, capaMsgs, capaFx;
+const nodoSvg = {};
+function el(tag, attrs, padre, texto) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (texto !== undefined) e.textContent = texto;
+  if (padre) padre.appendChild(e);
+  return e;
+}
+const MAQUINAS = [
+  { x: 10, w: 230, t: 'Máquina 1 · Consumidores', ip: IP.cons },
+  { x: 255, w: 480, t: 'Máquina 2 · Negocio', ip: IP.neg },
+  { x: 750, w: 240, t: 'Máquina 3 · Almacenamiento', ip: IP.alm },
+];
+function construirTopologia() {
+  svg.innerHTML = '';
+  for (const k in nodoSvg) delete nodoSvg[k];
+  for (const m of MAQUINAS) {
+    const g = el('g', { class: 'maq' }, svg);
+    el('rect', { x: m.x, y: 10, width: m.w, height: 580, rx: 14 }, g);
+    el('text', { x: m.x + 14, y: 34, class: 't' }, g, m.t);
+    el('text', { x: m.x + 14, y: 51, class: 'ip mono' }, g, m.ip);
+  }
+  capaLinks = el('g', {}, svg);
+  capaNodos = el('g', {}, svg);
+  capaMsgs = el('g', {}, svg);
+  capaFx = el('g', {}, svg);
+  layoutRmc();
+  for (const id in nodos) if (nodos[id].visible) crearNodoSvg(nodos[id]);
+  dibujarLinks();
+}
+function crearNodoSvg(n) {
+  const clic = ['gt', 'rmc', 'canc', 'pers'].includes(n.tipo);
+  const g = el('g', { class: 'nodo' + (clic ? ' clic' : ''), transform: `translate(${n.x},${n.y})` }, capaNodos);
+  if (clic) {
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.addEventListener('click', () => alternar(n.id));
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alternar(n.id); } });
+  }
+  const tip = el('title', {}, g);
+  let caja;
+  if (n.tipo === 'db') {
+    const w = n.w, h = n.h, ry = 9;
+    caja = el('path', { class: 'caja', d: `M${-w/2},${-h/2+ry} a${w/2},${ry} 0 0,0 ${w},0 a${w/2},${ry} 0 0,0 ${-w},0 v${h-2*ry} a${w/2},${ry} 0 0,0 ${w},0 v${-(h-2*ry)}` }, g);
+  } else {
+    caja = el('rect', { class: 'caja', x: -n.w / 2, y: -n.h / 2, width: n.w, height: n.h, rx: 10 }, g);
+  }
+  const tt = el('text', { class: 'tt', y: n.tipo === 'rmc' ? -3 : -5 }, g, n.titulo);
+  const st = el('text', { class: 'st mono', y: n.tipo === 'rmc' ? 12 : 11 }, g, n.sub);
+  const x = el('text', { class: 'x', x: n.w / 2 - 6, y: -n.h / 2 + 13 }, g, '✕ caído');
+  const bd = el('text', { class: 'bd', y: n.h / 2 + 15 }, g, '');
+  const ref = { g, caja, tt, st, bd, tip, x };
+  if (n.tipo === 'cliente') {
+    const b = el('g', { class: 'barra-espera', transform: `translate(${-n.w / 2},${n.h / 2 + 22})` }, g);
+    ref.bFondo = el('rect', { class: 'fondo', width: n.w, height: 5, rx: 2.5 }, b);
+    ref.bVal = el('rect', { width: 0, height: 5, rx: 2.5, fill: 'var(--accent)' }, b);
+    ref.bTxt = el('text', { class: 'bd', x: n.w / 2, y: 18 }, b, '');
+  }
+  nodoSvg[n.id] = ref;
+}
+function borde(n, tx, ty) {
+  const dx = tx - n.x, dy = ty - n.y;
+  if (!dx && !dy) return { x: n.x, y: n.y };
+  const s = Math.min((n.w / 2) / Math.abs(dx || 1e-9), (n.h / 2) / Math.abs(dy || 1e-9));
+  return { x: n.x + dx * Math.min(s, 1), y: n.y + dy * Math.min(s, 1) };
+}
+function linea(a, b, clase) {
+  const A = nodos[a], B = nodos[b];
+  if (!A.visible || !B.visible) return;
+  const p = borde(A, B.x, B.y), q = borde(B, A.x, A.y);
+  const ln = el('line', { x1: p.x, y1: p.y, x2: q.x, y2: q.y, class: 'link ' + (clase || '') }, capaLinks);
+  ln.dataset.k = [a, b].sort().join('-');
+}
+function dibujarLinks() {
+  if (!capaLinks) return;
+  capaLinks.innerHTML = '';
+  const gt = est.gtActivo || est.gtUltimo;
+  const otro = gt === 'gtA' ? 'gtB' : 'gtA';
+  for (const c of ['c1', 'c2', 'c3']) {
+    linea(c, gt, est.gtActivo ? 'fuerte' : 'tenue');
+    if (nodos[otro].visible) linea(c, otro, 'tenue');
+  }
+  for (const r of est.rmcs) {
+    linea(gt, r, nodos[r].vivo && est.gtActivo ? 'fuerte' : 'tenue');
+    linea(r, 'sp', nodos[r].vivo ? '' : 'tenue');
+    if (nodos.spl.visible) linea(r, 'spl', nodos[r].vivo && nodos[r].lecturas === 'spl' ? '' : 'tenue');
+  }
+  linea(gt, 'canc', est.gtActivo && nodos.canc.vivo ? 'fuerte' : 'tenue');
+  linea('canc', 'sp');
+  linea('sp', 'db', 'fuerte');
+  linea('spl', 'db', 'fuerte');
+}
+function crearPuntoSvg(v) {
+  if (!capaMsgs) return null;
+  const color = `var(${COLOR_OP[v.op] || '--muted'})`;
+  const g = el('g', { class: 'msg' }, capaMsgs);
+  el('circle', { r: 7, fill: v.resp ? 'var(--surface)' : color, stroke: color }, g);
+  el('text', { y: -12, fill: color }, g, v.etiqueta);
+  g.addEventListener('click', () => inspeccionar(v.msg, `${nombreNodo(v.de)} → ${nombreNodo(v.a)}`));
+  return g;
+}
+function marcarPerdido(id) {
+  const n = nodos[id];
+  if (!n || !capaFx) return;
+  const ox = (Math.random() - 0.5) * 30;
+  const t = el('text', { class: 'perdido', x: n.x + ox, y: n.y - n.h / 2 - 6 }, capaFx, '✕');
+  const t2 = el('text', { class: 'perdido-t', x: n.x + ox, y: n.y - n.h / 2 - 22 }, capaFx, 'perdido');
+  setTimeout(() => { t.remove(); t2.remove(); }, 1500);
+}
+function destellar(...ids) {
+  for (const id of ids) {
+    const r = nodoSvg[id]; if (!r) continue;
+    r.g.classList.add('flash');
+    setTimeout(() => r.g.classList.remove('flash'), 250);
+  }
+}
+
+function dibujar() {
+  document.getElementById('reloj').textContent = (sim.ahora / 1000).toFixed(2) + ' s';
+  for (const v of enVuelo) {
+    if (!v.g) continue;
+    const A = nodos[v.de], B = nodos[v.a];
+    const p = borde(A, B.x, B.y), q = borde(B, A.x, A.y);
+    let f = Math.max(0, Math.min(1, (sim.ahora - v.t0) / v.dur));
+    f = f < 0.5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+    v.g.setAttribute('transform', `translate(${p.x + (q.x - p.x) * f},${p.y + (q.y - p.y) * f})`);
+  }
+  for (const id in nodoSvg) {
+    const n = nodos[id], r = nodoSvg[id];
+    if (!n) continue;
+    const g = r.g;
+    g.classList.toggle('caido', !n.vivo);
+    g.classList.toggle('activo', n.tipo === 'gt' && est.gtActivo === id);
+    g.classList.toggle('ocupado', n.vivo && n.ocupado && (n.tipo === 'rmc' || n.tipo === 'canc'));
+    let titulo = n.titulo, badge = '', sub = n.sub;
+    if (n.tipo === 'gt') {
+      titulo = !n.vivo ? 'GT' : est.gtActivo === id ? 'GT activo' : 'GT de respaldo';
+      if (n.vivo && est.gtActivo !== id) sub = 'en espera: revisa cada 1 s';
+      const partes = [];
+      if (n.pend.size) partes.push(`pendientes: ${n.pend.size}`);
+      if (n.colaPush.length) partes.push(`cola de cancelaciones: ${n.colaPush.length}`);
+      badge = partes.join(' · ');
+    } else if (n.tipo === 'rmc') {
+      const lect = n.lecturas === 'spl' ? 'lee en réplica' : 'lee en principal';
+      sub = n.vivo ? (n.ocupado || n.cola.length ? `atendiendo${n.cola.length ? ' · cola ' + n.cola.length : ''}` : lect) : '';
+    } else if (n.tipo === 'canc') {
+      badge = n.cola.length ? `cola: ${n.cola.length}` : '';
+    } else if (n.tipo === 'db') {
+      let act = 0; for (const x of db.reservas.values()) if (x.activa) act++;
+      badge = `${act} reservas activas · ${db.ocupadosTotales()} asientos ocupados`;
+    } else if (n.tipo === 'cliente') {
+      const c = est.clientes[id.slice(1)];
+      const a = c.actual;
+      if (a) {
+        const frac = Math.min(1, (sim.ahora - a.plazoIni) / T_CLIENTE);
+        r.bVal.setAttribute('width', (n.w * frac).toFixed(1));
+        r.bVal.setAttribute('fill', frac > 0.75 ? 'var(--err)' : 'var(--accent)');
+        r.bTxt.textContent = `espera ${((sim.ahora - a.plazoIni) / 1000).toFixed(1)} / 5 s${a.intento > 1 ? ' · reintento' : ''}`;
+      } else {
+        r.bVal.setAttribute('width', 0);
+        r.bTxt.textContent = c.cola.length ? `en cola: ${c.cola.length}` : '';
+      }
+      badge = c.propias.length ? `reservas propias: ${c.propias.join(', ')}` : '';
+      if (badge.length > 34) badge = badge.slice(0, 33) + '…';
+    }
+    if (r.tt.textContent !== titulo) r.tt.textContent = titulo;
+    if (r.st.textContent !== sub) r.st.textContent = sub;
+    if (r.bd.textContent !== badge) r.bd.textContent = badge;
+    const tip = ['gt', 'rmc', 'canc', 'pers'].includes(n.tipo) ? (n.vivo ? 'Clic para detener' : 'Clic para arrancar') : titulo;
+    if (r.tip.textContent !== tip) r.tip.textContent = tip;
+  }
+}
+
+/* ====================================================================================
+   Bucle principal
+   ==================================================================================== */
+let ultimo = performance.now();
+let alAvanzar = 0;
+function bucle(ts) {
+  const dt = Math.min(ts - ultimo, 100);
+  ultimo = ts;
+  const rapido = !enVuelo.length && sim.vel < VEL_ESPERA;
+  document.getElementById('avance').hidden = !(rapido && !sim.pausado && Object.values(est.clientes).some(c => c.actual));
+  if (!sim.pausado) {
+    const fin = sim.ahora + dt * (rapido ? VEL_ESPERA : sim.vel);
+    for (;;) {
+      let prox = null;
+      for (const t of sim.timers) if (t.vivo && t.t <= fin && (!prox || t.t < prox.t || (t.t === prox.t && t.id < prox.id))) prox = t;
+      if (!prox) break;
+      prox.vivo = false;
+      sim.ahora = Math.max(sim.ahora, prox.t);
+      try { prox.fn(); } catch (e) { console.error(e); }
+    }
+    sim.ahora = fin;
+    if (++alAvanzar % 30 === 0) sim.timers = sim.timers.filter(t => t.vivo);
+  }
+  dibujar();
+  requestAnimationFrame(bucle);
+}
+
+/* ====================================================================================
+   Paneles: bitácora, inspector, base de datos, métricas, procesos
+   ==================================================================================== */
+const logEl = document.getElementById('log');
+let lineaSel = null;
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function estadoHtml(r) { return `\u0001${r.estado}${r.motivo ? ' ' + r.motivo : ''}\u0002${r.estado}\u0003`; }
+function formatear(texto) {
+  return esc(texto).replace(/\u0001([^\u0002]*)\u0002([A-Z]+)\u0003/g, (_, t, e) => `<span class="e-${e}">${t}</span>`);
+}
+function log(comp, texto, msg, interno, idc) {
+  const d = document.createElement('div');
+  d.className = 'l' + (interno ? ' interno' : '') + (comp === 'DEMO' ? ' demo' : '');
+  if (interno) d.dataset.interno = '1';
+  const etiqueta = comp === 'DEMO' ? '▶' : `[${comp}]`;
+  d.innerHTML = `<span class="t">${(sim.ahora / 1000).toFixed(2).padStart(6, ' ')}</span> <span class="tag ${comp}">${esc(etiqueta)}</span> ${formatear(texto)}`;
+  if (msg) {
+    d.classList.add('con-msg');
+    const copia = clonar(msg);
+    d.addEventListener('click', () => {
+      if (lineaSel) lineaSel.classList.remove('sel');
+      lineaSel = d; d.classList.add('sel');
+      inspeccionar(copia, `${comp === 'CLIENTE' && idc ? 'Cliente ' + idc : comp} · t = ${(parseFloat(d.querySelector('.t').textContent)).toFixed(2)} s`);
+    });
+  }
+  if (d.dataset.interno && !document.getElementById('ver-internos').checked) d.hidden = true;
+  const abajo = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 30;
+  logEl.appendChild(d);
+  while (logEl.childElementCount > 500) logEl.firstElementChild.remove();
+  if (abajo) logEl.scrollTop = logEl.scrollHeight;
+}
+document.getElementById('ver-internos').addEventListener('change', e => {
+  for (const d of logEl.querySelectorAll('[data-interno]')) d.hidden = !e.target.checked;
+  logEl.scrollTop = logEl.scrollHeight;
+});
+function inspeccionar(msg, ruta) {
+  document.getElementById('ruta').innerHTML = `<b>${esc(msg.tipo || (msg.estado ? 'Respuesta ' + msg.estado : 'Mensaje'))}</b> · ${esc(ruta)}`;
+  const txt = JSON.stringify(msg, (k, v) => {
+    if (Array.isArray(v) && v.length > 4) return [...v.slice(0, 3), `… y ${v.length - 3} más`];
+    return v;
+  }, 2);
+  document.getElementById('json').textContent = txt;
+}
+function resumenDatos(d) {
+  if (!d) return '';
+  const partes = [];
+  for (const k of ['mes', 'id_reserva', 'id_evento', 'fecha', 'n_asientos']) if (k in d) partes.push(d[k]);
+  return partes.join(' ');
+}
+function describir(pet) {
+  const d = pet.datos;
+  switch (pet.tipo) {
+    case 'CONSULTA': return `CONSULTA ${d.mes}`;
+    case 'RESERVA': return `RESERVA ${d.id_evento} ${d.fecha} x${d.n_asientos}`;
+    case 'MODIFICACION': return `MODIFICACION reserva ${d.id_reserva} -> ${'fecha' in d ? d.fecha : d.n_asientos + ' asientos'}`;
+    case 'CANCELACION': return `CANCELACION reserva ${d.id_reserva}`;
+  }
+  return pet.tipo;
+}
+function narrar(html) { document.getElementById('narrador').innerHTML = html; }
+
+function registrarMetrica(tipo, estado, ms) {
+  const m = est.metricas[tipo] || (est.metricas[tipo] = { n: 0, tiempos: [], EXITO: 0, FALLO: 0, ERROR: 0, ACK: 0 });
+  m.n++; m.tiempos.push(ms); m[estado] = (m[estado] || 0) + 1;
+  renderMetricas();
+}
+function renderMetricas() {
+  const filas = ['CONSULTA', 'RESERVA', 'MODIFICACION', 'CANCELACION'].map(t => {
+    const m = est.metricas[t];
+    if (!m) return `<tr><td>${t[0] + t.slice(1).toLowerCase()}</td><td class="n">0</td><td class="n">–</td><td class="n">–</td><td class="n">–</td><td class="n">–</td></tr>`;
+    const ts = [...m.tiempos].sort((a, b) => a - b);
+    const prom = ts.reduce((a, b) => a + b, 0) / ts.length;
+    const p95 = ts[Math.min(ts.length - 1, Math.ceil(0.95 * ts.length) - 1)];
+    const ok = t === 'CANCELACION' ? m.ACK : m.EXITO;
+    return `<tr><td>${t[0] + t.slice(1).toLowerCase()}</td><td class="n">${m.n}</td><td class="n">${ok}${m.FALLO ? ` <span class="e-FALLO">/ ${m.FALLO}</span>` : ''}</td>
+      <td class="n">${prom.toFixed(0)}</td><td class="n">${p95.toFixed(0)}</td><td class="n${m.ERROR ? ' e-ERROR' : ''}">${(100 * m.ERROR / m.n).toFixed(1)} %</td></tr>`;
+  }).join('');
+  document.getElementById('metricas').innerHTML =
+    `<thead><tr><th>Operación</th><th class="n">Total</th><th class="n">Éxito / fallo</th><th class="n">Prom. ms</th><th class="n">P95 ms</th><th class="n">Error</th></tr></thead><tbody>${filas}</tbody>`;
+}
+function renderBD() {
+  const ocup = [...db.ocurrencias.values()].filter(o => o.ocupados > 0)
+    .sort((a, b) => (+a.id_evento.slice(1)) - (+b.id_evento.slice(1)) || a.fecha.localeCompare(b.fecha));
+  document.getElementById('ocupaciones').innerHTML = ocup.length ? ocup.map(o =>
+    `<div class="ocup mono"><span>${o.id_evento} ${o.fecha.slice(8)}/11</span><span class="b"><i class="${o.ocupados >= o.capacidad ? 'lleno' : ''}" style="width:${o.ocupados}%"></i></span><span style="text-align:right">${o.ocupados}/${o.capacidad}</span></div>`).join('')
+    : '<div class="vacio">70 ocurrencias con 100 asientos libres cada una. Aún no hay reservas.</div>';
+  const ocupados = db.ocupadosTotales(), reservados = db.asientosReservados();
+  let activas = 0; for (const r of db.reservas.values()) if (r.activa) activas++;
+  document.getElementById('verif').innerHTML = ocupados === reservados
+    ? `<span class="e-EXITO">✓ verificar:</span> ${ocupados} asientos ocupados = suma de las ${activas} reservas activas`
+    : `<span class="e-ERROR">✕ inconsistencia:</span> ${ocupados} ocupados ≠ ${reservados} reservados`;
+  const rs = [...db.reservas.values()].reverse();
+  document.getElementById('reservas').innerHTML = rs.length
+    ? `<thead><tr><th>#</th><th>Cliente</th><th>Evento</th><th>Fecha</th><th class="n">Asientos</th></tr></thead><tbody>` +
+      rs.map(r => `<tr class="${r.activa ? '' : 'cancelada'}"><td>${r.id}</td><td>${r.id_cliente}</td><td>${r.id_evento}</td><td class="mono">${r.fecha}</td><td class="n">${r.n_asientos}</td></tr>`).join('') + '</tbody>'
+    : '<tbody><tr><td class="vacio">Sin reservas.</td></tr></tbody>';
+}
+function actualizarFallas() {
+  const cont = document.getElementById('fallas');
+  const ids = ['gtA', 'gtB', ...est.rmcs, 'canc', 'sp', 'spl'].filter(id => nodos[id].visible);
+  cont.innerHTML = '';
+  for (const id of ids) {
+    const n = nodos[id];
+    const fila = document.createElement('div'); fila.className = 'falla';
+    let estado = n.vivo ? 'en marcha' : 'caído', cls = n.vivo ? 'vivo' : 'muerto';
+    let nombre = n.titulo;
+    if (n.tipo === 'gt') {
+      nombre = `GT ${id === 'gtA' ? 'A' : 'B'}`;
+      if (n.vivo) { estado = est.gtActivo === id ? 'activo' : 'respaldo'; cls = est.gtActivo === id ? 'vivo' : 'resp'; }
+    }
+    fila.innerHTML = `<span class="nom">${esc(nombre)}</span><span class="pill ${cls}">${estado}</span>`;
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = n.vivo ? 'Detener' : 'Arrancar';
+    b.addEventListener('click', () => alternar(id));
+    fila.appendChild(b);
+    cont.appendChild(fila);
+  }
+  const esc_ = est.arq === 'escalable';
+  document.getElementById('rmc-mas').disabled = !esc_ || est.rmcs.length >= 5;
+  document.getElementById('rmc-menos').disabled = !esc_ || est.rmcs.length <= 1;
+  document.getElementById('escala-t').textContent = esc_ ? `Réplicas del RMC: ${est.rmcs.length}` : 'La arquitectura base tiene un solo RMC';
+}
+
+/* ====================================================================================
+   Formulario
+   ==================================================================================== */
+let opSel = 'CONSULTA';
+const $ = id => document.getElementById(id);
+function prepararFormulario() {
+  $('f-mes').innerHTML = MESES.map(m => `<option ${m === 'noviembre' ? 'selected' : ''}>${m}</option>`).join('');
+  $('f-evento').innerHTML = EVENTOS.map(e => `<option value="${e.id}">${e.id} · ${e.nombre}</option>`).join('') + '<option value="E77">E77 · no existe</option>';
+  const fechas = () => {
+    const e = EVENTOS.find(x => x.id === $('f-evento').value);
+    const fs = e ? e.fechas : ['2026/11/02'];
+    $('f-fechas').innerHTML = fs.map(f => `<option value="${f}">`).join('');
+    $('f-fecha').value = fs[0];
+  };
+  $('f-evento').addEventListener('change', fechas); fechas();
+  for (const b of $('f-ops').querySelectorAll('button')) b.addEventListener('click', () => {
+    opSel = b.dataset.op;
+    for (const x of $('f-ops').querySelectorAll('button')) x.classList.toggle('on', x === b);
+    for (const g of document.querySelectorAll('[data-grupo]')) g.hidden = g.dataset.grupo !== opSel;
+    actualizarAyuda();
+  });
+  $('f-mod-tipo').addEventListener('change', () => {
+    $('f-mod-val').value = $('f-mod-tipo').value === 'n' ? '5' : '2026/11/15';
+  });
+  $('f-cliente').addEventListener('change', actualizarAyuda);
+  $('enviar').addEventListener('click', () => {
+    const idc = +$('f-cliente').value;
+    let datos;
+    if (opSel === 'CONSULTA') datos = { mes: $('f-mes').value };
+    else if (opSel === 'RESERVA') datos = { id_evento: $('f-evento').value, fecha: $('f-fecha').value.trim(), n_asientos: parseInt($('f-asientos').value, 10) };
+    else if (opSel === 'MODIFICACION') {
+      datos = { id_reserva: parseInt($('f-mod-id').value, 10) };
+      if ($('f-mod-tipo').value === 'n') datos.n_asientos = parseInt($('f-mod-val').value, 10);
+      else datos.fecha = $('f-mod-val').value.trim();
+    } else datos = { id_reserva: parseInt($('f-can-id').value, 10) };
+    for (const k in datos) if (Number.isNaN(datos[k])) datos[k] = 0;
+    clientePedir(idc, opSel, datos);
+  });
+}
+function actualizarAyuda() {
+  const c = est.clientes[+$('f-cliente').value];
+  const txt = {
+    CONSULTA: 'Lista las ocurrencias del mes con los asientos libres. Va a la réplica de lectura si existe.',
+    RESERVA: 'Prueba una fecha que no es del evento, más de 100 asientos o el evento E77 para ver los rechazos.',
+    MODIFICACION: 'Cambia el número de asientos, o la fecha a otra ocurrencia del mismo evento (solo E1–E20 tienen dos).',
+    CANCELACION: 'El GT responde ACK al instante; el resultado llega después como notificación al cliente.',
+  }[opSel];
+  const propias = c && c.propias.length ? ` Reservas de este cliente: ${c.propias.join(', ')}.` : '';
+  $('f-ayuda').textContent = txt + ((opSel === 'MODIFICACION' || opSel === 'CANCELACION') ? propias : '');
+  if (c && c.propias.length) {
+    const ult = c.propias[c.propias.length - 1];
+    if (document.activeElement !== $('f-mod-id')) $('f-mod-id').value = ult;
+    if (document.activeElement !== $('f-can-id')) $('f-can-id').value = ult;
+  }
+}
+
+/* ====================================================================================
+   Escenarios: caso básico, carga aleatoria y demostraciones de fallas
+   ==================================================================================== */
+const CASO_BASICO = `CONSULTA noviembre
+RESERVA E1 2026/11/01 3
+RESERVA E1 2026/11/01 2
+RESERVA E1 2026/11/15 100
+RESERVA E1 2026/11/15 1
+RESERVA E30 2026/11/02 7
+RESERVA E30 2026/11/16 1
+RESERVA E77 2026/11/02 1
+RESERVA E2 02-11-2026 1
+RESERVA E2 2026/11/02
+MODIFICACION 1 5
+MODIFICACION 2 2026/11/15
+MODIFICACION 4 2026/11/16
+MODIFICACION 4 4
+MODIFICACION 99 2
+MODIFICACION 2 0
+CANCELACION 2
+CANCELACION 2
+CANCELACION 99
+ESPERAR 1
+CONSULTA noviembre`;
+
+function parsearLinea(l) {
+  const p = l.trim().split(/\s+/);
+  const op = (p[0] || '').toUpperCase();
+  if (op === 'CONSULTA' && p.length === 2) return { tipo: op, datos: { mes: p[1].toLowerCase() } };
+  if (op === 'RESERVA' && p.length === 4) return { tipo: op, datos: { id_evento: p[1], fecha: p[2], n_asientos: parseInt(p[3], 10) } };
+  if (op === 'MODIFICACION' && p.length === 3) {
+    const id = parseInt(p[1], 10);
+    return p[2].includes('/') ? { tipo: op, datos: { id_reserva: id, fecha: p[2] } } : { tipo: op, datos: { id_reserva: id, n_asientos: parseInt(p[2], 10) } };
+  }
+  if (op === 'CANCELACION' && p.length === 2) return { tipo: op, datos: { id_reserva: parseInt(p[1], 10) } };
+  if (op === 'ESPERAR' && p.length === 2) return { tipo: op, seg: parseFloat(p[1]) };
+  return null;
+}
+
+async function ejecutarCaso() {
+  if (est.caso) return;
+  reiniciarTodo(est.arq);
+  const gen = est.gen;
+  est.caso = true;
+  $('caso').disabled = true;
+  log('DEMO', 'Caso basico: python -m capa_cliente.main --id 1 --script pruebas/caso_basico.txt --detalle (base recien cargada)');
+  narrar('<b>Caso básico</b>: el cliente 1 ejecuta las 21 operaciones de <code>pruebas/caso_basico.txt</code> una tras otra.');
+  const lineas = CASO_BASICO.split('\n');
+  for (let i = 0; i < lineas.length; i++) {
+    if (gen !== est.gen) return;
+    $('progreso').textContent = `Caso básico: línea ${i + 1} de ${lineas.length} · ${lineas[i]}`;
+    const op = parsearLinea(lineas[i]);
+    if (!op) { log('CLIENTE', `cliente 1: linea mal escrita, se ignora: "${lineas[i]}"`); continue; }
+    if (op.tipo === 'ESPERAR') { await esperar(op.seg * 1000); continue; }
+    await clientePedir(1, op.tipo, op.datos);
+  }
+  if (gen !== est.gen) return;
+  await esperar(400);
+  if (gen !== est.gen) return;
+  est.caso = false;
+  $('caso').disabled = false;
+  $('progreso').textContent = 'Caso básico terminado. Estado esperado: E1 01 → 5, E1 15 → 100, E30 02 → 4; 109 asientos en 3 reservas activas.';
+  narrar('Caso básico terminado: compare la base de datos con el estado esperado (109 asientos ocupados, 3 reservas activas).');
+}
+
+function azar(a, b) { return a + Math.random() * (b - a); }
+async function cargaCliente(idc, gen) {
+  while (est.carga && gen === est.gen) {
+    await esperar(azar(600, 2200));
+    if (!est.carga || gen !== est.gen) return;
+    const c = est.clientes[idc];
+    const x = Math.random();
+    let tipo = 'CONSULTA', datos = { mes: 'noviembre' };
+    if (x > 0.55) {
+      const y = Math.random();
+      if (y < 0.25 && c.propias.length) {
+        tipo = 'MODIFICACION';
+        datos = { id_reserva: c.propias[Math.floor(Math.random() * c.propias.length)], n_asientos: 1 + Math.floor(Math.random() * 6) };
+      } else if (y < 0.4 && c.propias.length) {
+        tipo = 'CANCELACION'; datos = { id_reserva: c.propias[Math.floor(Math.random() * c.propias.length)] };
+      } else {
+        const e = Math.random() < 0.3 ? EVENTOS[0] : EVENTOS[Math.floor(Math.random() * 50)];
+        tipo = 'RESERVA'; datos = { id_evento: e.id, fecha: e.fechas[Math.floor(Math.random() * e.fechas.length)], n_asientos: 1 + Math.floor(Math.random() * 6) };
+      }
+    }
+    await clientePedir(idc, tipo, datos);
+  }
+}
+function alternarCarga() {
+  est.carga = !est.carga;
+  $('carga').classList.toggle('on', est.carga);
+  $('carga').textContent = est.carga ? '■ Detener la carga aleatoria' : '▶ Carga aleatoria de los 3 clientes';
+  if (est.carga) {
+    log('DEMO', 'Carga aleatoria: cada cliente envia una peticion al recibir la anterior (consultas, reservas, modificaciones y cancelaciones de sus reservas)');
+    narrar('<b>Carga aleatoria</b>: los tres clientes envían peticiones sin parar. Pruebe a detener componentes mientras corre.');
+    for (let i = 1; i <= 3; i++) cargaCliente(i, est.gen);
+  }
+}
+
+async function demo(cual) {
+  if (est.demo) return;
+  if (est.arq !== 'escalable') { reiniciarTodo('escalable'); }
+  // la demo necesita todos los procesos en marcha
+  for (const id of ['gtA', 'gtB', 'canc', 'sp', 'spl', ...est.rmcs]) if (!nodos[id].vivo) arrancar(id);
+  if (!est.gtActivo) { est.gtActivo = nodos.gtA.vivo ? 'gtA' : 'gtB'; dibujarLinks(); }
+  const gen = est.gen;
+  est.demo = true;
+  for (const b of document.querySelectorAll('[data-demo]')) b.disabled = true;
+  const fin = () => { if (gen === est.gen) { est.demo = false; for (const b of document.querySelectorAll('[data-demo]')) b.disabled = false; } };
+  try {
+    if (cual === 'gt') {
+      const gt = est.gtActivo;
+      log('DEMO', 'Demo: se detiene el GT activo cuando la reserva del cliente 2 ya esta en un RMC');
+      narrar('El <b>cliente 2</b> envía una reserva. Cuando llegue al RMC se detendrá el <b>GT activo</b>: la respuesta del RMC no tendrá a quién volver.');
+      let uuid = null;
+      ganchos.push(v => {
+        if (gen !== est.gen) return true;
+        if (v.msg.tipo === 'RESERVA' && v.a.startsWith('rmc') && v.msg.id_cliente === 2) {
+          uuid = v.msg.uuid;
+          matar(gt, 'demo');
+          narrar('Se detuvo el <b>GT activo</b> con la reserva dentro del sistema. El respaldo tomará los puertos en ≤ 1 s; el RMC sigue trabajando.');
+          return true;
+        }
+        return false;
+      });
+      const r = await clientePedir(2, 'RESERVA', { id_evento: 'E3', fecha: '2026/11/03', n_asientos: 2 });
+      if (gen !== est.gen) return;
+      narrar(`El cliente recibió <b>${r.estado}</b> (reserva ${r.datos.id_reserva ?? '–'}) tras reintentar con el mismo uuid. La persistencia reconoció el uuid: <b>no se reservó dos veces</b>. El GT caído se reinicia como respaldo.`);
+      await esperar(1500);
+      if (gen !== est.gen) return;
+      arrancar(gt);
+    } else if (cual === 'rmc') {
+      log('DEMO', 'Demo: se detiene el RMC que atiende la reserva del cliente 3 justo cuando la persistencia la guarda');
+      narrar('El <b>cliente 3</b> envía una reserva. El RMC que la atienda se detendrá cuando su <code>AGREGAR_RESERVA</code> llegue a la persistencia.');
+      let caido = null;
+      ganchos.push(v => {
+        if (gen !== est.gen) return true;
+        if (v.msg.tipo === 'AGREGAR_RESERVA' && v.a === 'sp' && v.msg.id_cliente === 3) {
+          caido = v.de;
+          matar(caido, 'demo');
+          narrar(`<b>${nodos[caido].titulo}</b> se detuvo: la persistencia <b>sí guardó</b> la reserva, pero la respuesta ya no tiene a quién volver. El GT esperará 2 s.`);
+          return true;
+        }
+        return false;
+      });
+      const r = await clientePedir(3, 'RESERVA', { id_evento: 'E4', fecha: '2026/11/04', n_asientos: 3 });
+      if (gen !== est.gen) return;
+      narrar(`El cliente recibió <b>${r.estado}</b> (reserva ${r.datos.id_reserva ?? '–'}): otro RMC reenvió la escritura y la persistencia devolvió el resultado guardado. Hay una sola reserva.`);
+      await esperar(1500);
+      if (gen !== est.gen || !caido) return;
+      arrancar(caido);
+    } else if (cual === 'canc') {
+      log('DEMO', 'Demo: cae el Servicio de Cancelaciones; las cancelaciones se aceptan igual y esperan en la cola');
+      narrar('El <b>cliente 1</b> hace una reserva para luego cancelarla.');
+      const r = await clientePedir(1, 'RESERVA', { id_evento: 'E5', fecha: '2026/11/05', n_asientos: 2 });
+      if (gen !== est.gen) return;
+      if (r.estado !== 'EXITO') { narrar('La reserva no se pudo hacer; la demostración se detiene.'); return; }
+      matar('canc', 'demo');
+      narrar('Se detuvo el <b>Servicio de Cancelaciones</b>. El cliente cancela: el GT responde <b>ACK</b> igual y deja la cancelación en la cola del PUSH.');
+      await clientePedir(1, 'CANCELACION', { id_reserva: r.datos.id_reserva });
+      if (gen !== est.gen) return;
+      await esperar(2500);
+      if (gen !== est.gen) return;
+      narrar('Se arranca de nuevo el <b>Servicio de Cancelaciones</b>: recibe la cancelación pendiente, libera los asientos y <b>notifica</b> al cliente.');
+      arrancar('canc');
+    } else if (cual === 'replica') {
+      log('DEMO', 'Demo: cae la replica de lectura; las consultas pasan al servicio principal');
+      matar('spl', 'demo');
+      narrar('Se detuvo la <b>réplica de lectura</b>. El cliente 2 consulta: el RMC esperará 1,67 s a la réplica y reintentará en el principal.');
+      const r = await clientePedir(2, 'CONSULTA', { mes: 'noviembre' });
+      if (gen !== est.gen) return;
+      narrar(`El cliente recibió <b>${r.estado}</b>. Ese RMC ya no usa la réplica; los demás cambiarán al principal en su primera consulta. Arránquela con el botón de Procesos.`);
+    }
+  } finally {
+    fin();
+  }
+}
+
+/* ====================================================================================
+   Arranque y controles generales
+   ==================================================================================== */
+function reiniciarTodo(arq) {
+  ganchos.length = 0;
+  iniciarEstado(arq);
+  $('carga').classList.remove('on');
+  $('carga').textContent = '▶ Carga aleatoria de los 3 clientes';
+  $('caso').disabled = false;
+  for (const b of document.querySelectorAll('[data-demo]')) b.disabled = false;
+  $('progreso').textContent = '';
+  logEl.innerHTML = '';
+  $('arq-base').classList.toggle('on', arq === 'base');
+  $('arq-esc').classList.toggle('on', arq === 'escalable');
+  construirTopologia();
+  renderBD(); renderMetricas(); actualizarFallas(); actualizarAyuda();
+  inspeccionar({}, '');
+  $('ruta').textContent = 'Haga clic en un mensaje en movimiento o en una línea de la bitácora.';
+  log('PERSISTENCIA', '[CARGA] 50 eventos cargados (caso del enunciado): 70 ocurrencias de 100 asientos');
+  if (arq === 'escalable') {
+    log('DEMO', 'Arquitectura escalable: GT activo y de respaldo, 3 RMC con --con-replica, replica de lectura (:5559)');
+    narrar('Arquitectura <b>escalable y tolerante a fallas</b>: GT de respaldo, tres RMC que reparten el trabajo y réplica de lectura.');
+  } else {
+    log('DEMO', 'Arquitectura base: un GT, un RMC y la persistencia principal');
+    narrar('Arquitectura <b>base</b>: un GT, un RMC y un servicio de persistencia. Si cae un componente, no hay quien lo reemplace.');
+  }
+}
+
+$('arq-base').addEventListener('click', () => reiniciarTodo('base'));
+$('arq-esc').addEventListener('click', () => reiniciarTodo('escalable'));
+$('reiniciar').addEventListener('click', () => reiniciarTodo(est.arq));
+$('vel').addEventListener('input', e => { sim.vel = parseFloat(e.target.value); $('vel-t').textContent = '×' + sim.vel.toFixed(2); });
+$('pausa').addEventListener('click', () => {
+  sim.pausado = !sim.pausado;
+  $('pausa').textContent = sim.pausado ? 'Continuar' : 'Pausar';
+  $('pausa').classList.toggle('on', sim.pausado);
+});
+$('caso').addEventListener('click', ejecutarCaso);
+$('carga').addEventListener('click', alternarCarga);
+for (const b of document.querySelectorAll('[data-demo]')) b.addEventListener('click', () => demo(b.dataset.demo));
+$('rmc-mas').addEventListener('click', () => {
+  agregarRmc(false);
+  layoutRmc();
+  construirTopologia();
+  actualizarFallas();
+  narrar('Se arrancó otro <b>RMC</b>: se conecta al DEALER del GT y empieza a recibir su turno de peticiones sin tocar el resto.');
+});
+$('rmc-menos').addEventListener('click', () => {
+  const id = est.rmcs[est.rmcs.length - 1];
+  matar(id, 'se quita la replica');
+  est.rmcs.pop();
+  delete nodos[id];
+  // los mensajes en camino hacia ese RMC se pierden
+  for (let i = enVuelo.length - 1; i >= 0; i--) if (enVuelo[i].a === id || enVuelo[i].de === id) { enVuelo[i].g && enVuelo[i].g.remove(); enVuelo[i].g = null; }
+  nodos[id] = nodo(id, { tipo: 'rmc', titulo: '', vivo: false, visible: false, x: 640, y: 300 });
+  layoutRmc();
+  construirTopologia();
+  actualizarFallas();
+});
+$('tema').addEventListener('click', () => {
+  const r = document.documentElement;
+  const oscuro = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = oscuro ? 'light' : 'dark';
+  try { localStorage.setItem('srb-tema', r.dataset.theme); } catch (e) {}
+});
+try { const t = localStorage.getItem('srb-tema'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+prepararFormulario();
+reiniciarTodo('escalable');
+requestAnimationFrame(bucle);
+</script>
+</body>
+</html>
